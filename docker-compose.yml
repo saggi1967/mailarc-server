@@ -1,0 +1,41 @@
+# mailarc-server + Postgres.
+#
+# Vorbereitung: eine .env neben dieser Datei mit den Secrets für die Substitution:
+#   API_TOKEN=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')
+#   SECRET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')
+#   POSTGRES_PASSWORD=<beliebig>
+#
+# Start:  docker compose up --build      →  http://localhost:8000  (Docs: /docs)
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mailarc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mailarc}
+      POSTGRES_DB: mailarc
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mailarc -d mailarc"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://mailarc:${POSTGRES_PASSWORD:-mailarc}@db:5432/mailarc
+      # Müssen gesetzt sein (in der .env neben dieser Datei) — sonst bricht Compose ab.
+      API_TOKEN: ${API_TOKEN:?API_TOKEN muss in der .env gesetzt sein}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY muss in der .env gesetzt sein}
+      LOCK_TTL_SECONDS: ${LOCK_TTL_SECONDS:-300}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

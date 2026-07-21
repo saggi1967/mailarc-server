@@ -59,6 +59,31 @@ Alle fachlichen Endpunkte verlangen `Authorization: Bearer <API_TOKEN>`.
 pytest -q          # End-to-End-Smoke-Test über den kompletten Vertrag
 ```
 
+## Docker
+
+Kompletter Stack (Server + Postgres) via `docker-compose.yml`. Erst eine `.env`
+**neben** der Compose-Datei mit den Secrets für die Variablen-Substitution anlegen:
+
+```bash
+cd mailarc-server
+{
+  echo "API_TOKEN=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+  echo "SECRET_KEY=$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+  echo "POSTGRES_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')"
+} > .env
+
+docker compose up --build        # http://localhost:8000  ·  Docs: /docs
+```
+
+Nur den Server als Image bauen/laufen (eigene DB):
+
+```bash
+docker build -t mailarc-server .
+docker run -p 8000:8000 \
+  -e DATABASE_URL=sqlite:////data/mailarc.db -v mailarc-data:/data \
+  -e API_TOKEN=... -e SECRET_KEY=... mailarc-server
+```
+
 ## Postgres
 
 ```env
