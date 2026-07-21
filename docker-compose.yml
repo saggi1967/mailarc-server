@@ -34,7 +34,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY muss in der .env gesetzt sein}
       LOCK_TTL_SECONDS: ${LOCK_TTL_SECONDS:-300}
     ports:
-      - "8000:8000"
+      - "9000:8000"
     restart: unless-stopped
 
 volumes:
