@@ -91,3 +91,34 @@ DATABASE_URL=postgresql+psycopg://mailarc:geheim@localhost:5432/mailarc
 ```
 Dazu `pip install -e ".[postgres]"`. Schema wird beim Start automatisch angelegt
 (`Base.metadata.create_all`); für echte Migrationen ggf. Alembic ergänzen.
+
+## Troubleshooting
+
+### `FATAL: password authentication failed for user "mailarc"`
+
+Kein Code-Fehler, sondern ein Postgres-Volume-Effekt: Postgres übernimmt
+`POSTGRES_PASSWORD` **nur bei der Erst-Initialisierung** eines leeren
+Datenverzeichnisses. Existiert das Volume `pgdata` schon aus einem früheren
+`docker compose up`, behält die DB ihr damaliges Passwort — eine später
+geänderte `.env` erreicht sie nicht mehr, und der Server verbindet sich mit dem
+neuen Passwort → Auth-Fehler.
+
+**Fix A — Volume neu aufsetzen** (wenn noch keine wichtigen Daten drin sind):
+
+```bash
+docker compose down -v && docker compose up -d --build
+```
+
+**Fix B — Passwort in-place angleichen** (erhält vorhandene Daten): das
+DB-Rollenpasswort auf genau den Wert setzen, den der Server laut aufgelöster
+Compose-Config nutzt:
+
+```bash
+PW=$(docker compose config | grep -oE 'mailarc:[^@]+@db' | head -1 | sed -E 's#mailarc:(.+)@db#\1#')
+docker compose exec -T db psql -U mailarc -d mailarc -c "ALTER USER mailarc PASSWORD '$PW';"
+docker compose restart server
+```
+
+**Merke:** Nach dem ersten Start die `.env`-Passwörter nicht mehr ändern — sonst
+einen der beiden Wege oben gehen. Für den Betrieb ein langes Zufallspasswort
+verwenden (kein kurzer Platzhalter).
