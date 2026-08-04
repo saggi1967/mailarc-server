@@ -40,6 +40,19 @@ class Account(Base):
     imap_user: Mapped[str] = mapped_column(String(255))
     imap_password_enc: Mapped[str] = mapped_column(Text)  # Fernet-Token, nie im Klartext
     folders: Mapped[str] = mapped_column(String(1024), default="INBOX")
+
+    # Zentrale Client-Konfiguration je Profil (optional). NULL = der Client behält
+    # seinen lokalen Default/Bootstrap-Wert. So muss nur ES_PASSWORD verschlüsselt
+    # gehalten werden (es_password_enc), der Rest ist unkritische Betriebskonfig.
+    es_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    es_user: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    es_password_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # Fernet
+    es_index: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    es_verify_certs: Mapped[bool | None] = mapped_column(nullable=True)
+    attachment_text: Mapped[bool | None] = mapped_column(nullable=True)
+    attachment_max_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    attachment_max_chars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 

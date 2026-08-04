@@ -10,7 +10,21 @@ from pydantic import BaseModel
 
 
 # ── Accounts ────────────────────────────────────────────────────────────────
-class AccountCreate(BaseModel):
+# Zentrale Client-Konfiguration je Profil, die über die reinen IMAP-Zugangsdaten
+# hinausgeht (ES-Ziel, Anhang-Optionen). Alle optional: NULL heißt „Client behält
+# seinen lokalen Default". es_password ist das einzige zusätzliche Secret.
+class _CentralConfigFields(BaseModel):
+    es_host: str | None = None
+    es_user: str | None = None
+    es_password: str | None = None
+    es_index: str | None = None
+    es_verify_certs: bool | None = None
+    attachment_text: bool | None = None
+    attachment_max_bytes: int | None = None
+    attachment_max_chars: int | None = None
+
+
+class AccountCreate(_CentralConfigFields):
     name: str
     imap_host: str
     imap_port: int = 993
@@ -21,7 +35,7 @@ class AccountCreate(BaseModel):
     folders: str = "INBOX"
 
 
-class AccountUpdate(BaseModel):
+class AccountUpdate(_CentralConfigFields):
     """Teil-Update (PATCH): nur gesetzte Felder werden geändert."""
 
     imap_host: str | None = None
@@ -34,7 +48,7 @@ class AccountUpdate(BaseModel):
 
 
 class AccountOut(BaseModel):
-    """Liste/Anzeige — ohne Passwort."""
+    """Liste/Anzeige — ohne Passwörter."""
 
     name: str
     imap_host: str
@@ -43,6 +57,16 @@ class AccountOut(BaseModel):
     imap_ssl_verify: bool
     imap_user: str
     folders: str
+    # zentrale Zusatzkonfig (ohne es_password), nur zur Anzeige/Kontrolle
+    es_host: str | None = None
+    es_user: str | None = None
+    es_index: str | None = None
+    es_verify_certs: bool | None = None
+    attachment_text: bool | None = None
+    attachment_max_bytes: int | None = None
+    attachment_max_chars: int | None = None
+    # Nur ob ein ES-Passwort hinterlegt ist — nie das Passwort selbst.
+    es_password_set: bool = False
 
 
 class CredentialsOut(BaseModel):
@@ -55,6 +79,23 @@ class CredentialsOut(BaseModel):
     imap_user: str
     imap_password: str
     folders: str
+
+
+class ProfileConfigOut(CredentialsOut):
+    """Vollständiges Profil für ``ensure_central_config`` — IMAP + ES + Anhang.
+
+    Enthält die entschlüsselten Secrets (imap_password via CredentialsOut,
+    es_password hier). Nur über Bearer-Auth erreichbar.
+    """
+
+    es_host: str | None = None
+    es_user: str | None = None
+    es_password: str | None = None
+    es_index: str | None = None
+    es_verify_certs: bool | None = None
+    attachment_text: bool | None = None
+    attachment_max_bytes: int | None = None
+    attachment_max_chars: int | None = None
 
 
 # ── Mailboxes ───────────────────────────────────────────────────────────────

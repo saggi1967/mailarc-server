@@ -21,7 +21,9 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="mailarc-server", version="1.0.0", lifespan=lifespan)
+from app import __version__
+
+app = FastAPI(title="mailarc-server", version=__version__, lifespan=lifespan)
 
 
 @app.get("/health", tags=["meta"])

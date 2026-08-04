@@ -58,6 +58,31 @@ def test_full_flow():
         assert creds["imap_password"] == "geheim2"
         assert creds["imap_host"] == "mail.firma.example"
 
+        # -- Zentrale Zusatzkonfig (ES + Anhang) setzen und über /config lesen ----
+        cfg_patch = {
+            "es_host": "https://es.firma.example:9200",
+            "es_user": "elastic",
+            "es_password": "es-geheim",
+            "es_index": "mails_firma",
+            "es_verify_certs": False,
+            "attachment_text": True,
+            "attachment_max_bytes": 5_000_000,
+        }
+        assert c.patch("/accounts/firma", json=cfg_patch, headers=AUTH).status_code == 200
+        # es_password erscheint nie in der Anzeige-Liste …
+        row = c.get("/accounts", headers=AUTH).json()[0]
+        assert row["es_host"] == "https://es.firma.example:9200"
+        assert "es_password" not in row
+        assert row["es_password_set"] is True   # gesetzt-Flag, aber nie das Secret
+        # … wohl aber (entschlüsselt) im vollständigen /config-Profil.
+        cfg = c.get("/accounts/firma/config", headers=AUTH).json()
+        assert cfg["imap_password"] == "geheim2"          # IMAP weiterhin dabei
+        assert cfg["es_password"] == "es-geheim"          # zweites Secret entschlüsselt
+        assert cfg["es_index"] == "mails_firma"
+        assert cfg["es_verify_certs"] is False
+        assert cfg["attachment_max_bytes"] == 5_000_000
+        assert cfg["attachment_max_chars"] is None        # nicht gesetzt → NULL
+
         # -- Mailbox upsert + state --------------------------------------
         mb_id = c.post("/mailboxes", json={"name": "INBOX"}, headers=AUTH).json()["id"]
         assert c.patch(
