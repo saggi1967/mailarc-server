@@ -12,14 +12,31 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.models import Account
-from app.schemas import AccountCreate, AccountOut, AccountUpdate, CredentialsOut
+from app.schemas import (
+    AccountCreate,
+    AccountOut,
+    AccountUpdate,
+    CredentialsOut,
+    ProfileConfigOut,
+)
 from app.security import decrypt_password, encrypt_password
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
+# Zentrale Zusatzkonfig ohne Secret — Spaltennamen == Feldnamen (direktes setattr).
+_CENTRAL_PLAIN = (
+    "es_host",
+    "es_user",
+    "es_index",
+    "es_verify_certs",
+    "attachment_text",
+    "attachment_max_bytes",
+    "attachment_max_chars",
+)
+
 
 def _out(a: Account) -> dict:
-    return {
+    out = {
         "name": a.name,
         "imap_host": a.imap_host,
         "imap_port": a.imap_port,
@@ -28,6 +45,11 @@ def _out(a: Account) -> dict:
         "imap_user": a.imap_user,
         "folders": a.folders,
     }
+    out.update({f: getattr(a, f) for f in _CENTRAL_PLAIN})
+    # Secret nicht preisgeben, aber sichtbar machen, OB eines hinterlegt ist
+    # (wichtig fürs Debuggen von ES-401: Host/User gesetzt, Passwort aber nicht).
+    out["es_password_set"] = bool(a.es_password_enc)
+    return out
 
 
 def _get_or_404(db: Session, name: str) -> Account:
@@ -56,6 +78,8 @@ def create_account(body: AccountCreate, db: Session = Depends(get_session)) -> d
         imap_user=body.imap_user,
         imap_password_enc=encrypt_password(body.imap_password),
         folders=body.folders,
+        es_password_enc=encrypt_password(body.es_password) if body.es_password else None,
+        **{f: getattr(body, f) for f in _CENTRAL_PLAIN},
     )
     db.add(a)
     db.flush()
@@ -66,8 +90,12 @@ def create_account(body: AccountCreate, db: Session = Depends(get_session)) -> d
 def update_account(name: str, body: AccountUpdate, db: Session = Depends(get_session)) -> dict:
     a = _get_or_404(db, name)
     data = body.model_dump(exclude_unset=True)
+    # Secrets getrennt behandeln: nie als Klartext-Spalte setzen.
     if "imap_password" in data:
         a.imap_password_enc = encrypt_password(data.pop("imap_password"))
+    if "es_password" in data:
+        pw = data.pop("es_password")
+        a.es_password_enc = encrypt_password(pw) if pw else None
     for field, value in data.items():
         setattr(a, field, value)
     db.flush()
@@ -81,9 +109,7 @@ def delete_account(name: str, db: Session = Depends(get_session)) -> dict:
     return {"deleted": name}
 
 
-@router.get("/{name}/credentials", response_model=CredentialsOut)
-def get_credentials(name: str, db: Session = Depends(get_session)) -> dict:
-    a = _get_or_404(db, name)
+def _credentials(a: Account) -> dict:
     return {
         "imap_host": a.imap_host,
         "imap_port": a.imap_port,
@@ -93,3 +119,23 @@ def get_credentials(name: str, db: Session = Depends(get_session)) -> dict:
         "imap_password": decrypt_password(a.imap_password_enc),
         "folders": a.folders,
     }
+
+
+@router.get("/{name}/credentials", response_model=CredentialsOut)
+def get_credentials(name: str, db: Session = Depends(get_session)) -> dict:
+    """Nur die IMAP-Zugangsdaten (Rückwärtskompatibilität)."""
+    return _credentials(_get_or_404(db, name))
+
+
+@router.get("/{name}/config", response_model=ProfileConfigOut)
+def get_config(name: str, db: Session = Depends(get_session)) -> dict:
+    """Vollständiges Profil (IMAP + ES + Anhang) für ``ensure_central_config``.
+
+    Entschlüsselt beide Secrets. NULL-Felder bedeuten „Client behält seinen
+    lokalen Default" — der Client überschreibt nur gesetzte Werte.
+    """
+    a = _get_or_404(db, name)
+    cfg = _credentials(a)
+    cfg.update({f: getattr(a, f) for f in _CENTRAL_PLAIN})
+    cfg["es_password"] = decrypt_password(a.es_password_enc) if a.es_password_enc else None
+    return cfg
