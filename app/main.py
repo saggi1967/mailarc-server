@@ -9,9 +9,12 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from app import __version__
+from app.config import settings
 from app.db import init_db
-from app.routers import accounts, emails, mailboxes, stats, sync_jobs
+from app.routers import accounts, client, emails, mailboxes, stats, sync_jobs
 from app.security import require_token
 
 
@@ -21,9 +24,17 @@ async def lifespan(app: FastAPI):
     yield
 
 
-from app import __version__
-
 app = FastAPI(title="mailarc-server", version=__version__, lifespan=lifespan)
+
+# CORS für das getrennte Frontend (mailarc-web). Credentials nötig, da die
+# client-API mit httpOnly-Session-Cookie arbeitet.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.web_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health", tags=["meta"])
@@ -31,6 +42,9 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-# Alle fachlichen Router erfordern ein gültiges Bearer-Token.
+# Interner CLI-Vertrag: alle Router erfordern ein gültiges Bearer-Token.
 for module in (accounts, mailboxes, emails, sync_jobs, stats):
     app.include_router(module.router, dependencies=[Depends(require_token)])
+
+# client-API (/api): eigene Session-Cookie-Auth statt Bearer-Token.
+app.include_router(client.router)

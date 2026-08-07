@@ -34,5 +34,29 @@ class Settings(BaseSettings):
     # Fortschritt eines Sync-Jobs alle N verarbeiteten Mails persistieren (Live-Poll).
     JOB_COMMIT_EVERY: int = 200
 
+    # --- Elasticsearch (für die client-API /api/search) ---------------------
+    # Der Server spricht ES direkt, damit Web-/Rich-Clients suchen können, ohne ES
+    # je an den Browser zu exponieren. Gleiche Instanz/Index wie der CLI-Indexlauf.
+    ES_HOST: str = "http://localhost:9200"
+    ES_USER: str = "elastic"
+    ES_PASSWORD: str = ""
+    ES_INDEX: str = "emails"
+    ES_VERIFY_CERTS: bool = True
+
+    # --- client-API-Auth (Web-UI / Rich-Client) -----------------------------
+    # Leichtgewichtige interne Auth: ein Benutzer, signiertes Session-Cookie
+    # (HMAC über SECRET_KEY). Für Mehrbenutzer/Rollen später erweiterbar.
+    WEB_USERNAME: str = "admin"
+    WEB_PASSWORD: str = ""            # leer = client-API-Login deaktiviert (500)
+    WEB_SESSION_TTL: int = 43200      # Gültigkeit des Session-Cookies in Sekunden (12 h)
+    # Erlaubte Frontend-Origins (CORS, Komma-getrennt). Default: Vite-Dev-Server.
+    WEB_ORIGINS: str = "http://localhost:5173"
+    WEB_COOKIE_SECURE: bool = False   # in Produktion (HTTPS) auf true
+    WEB_COOKIE_SAMESITE: str = "lax"  # bei fremder Domain + HTTPS: "none"
+
+    @property
+    def web_origins(self) -> list[str]:
+        return [o.strip() for o in self.WEB_ORIGINS.split(",") if o.strip()]
+
 
 settings = Settings()
