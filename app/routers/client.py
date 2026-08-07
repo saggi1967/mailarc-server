@@ -8,16 +8,46 @@ Einzelmail-Detail aus dem ES-Dokument. Getrennt vom internen CLI-Vertrag
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app import es
+from app import es, mailparse, render
 from app.config import settings
+from app.db import get_session
+from app.models import Email, Mailbox
+from app.routers.stats import compute_summary
 from app.webauth import COOKIE_NAME, check_login, current_user, issue_token
 
 router = APIRouter(prefix="/api", tags=["client"])
 
 _TOP_FIELDS = {"from_domain", "from_addr", "mailbox"}
+
+
+def _email_by_doc_id(db: Session, doc_id: str) -> Email | None:
+    """Löst mailbox:uidvalidity:uid oder Message-ID zur Mail in der zentralen DB."""
+    parts = doc_id.rsplit(":", 2)
+    if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+        e = db.scalar(
+            select(Email)
+            .join(Mailbox, Mailbox.id == Email.mailbox_id)
+            .where(Mailbox.name == parts[0], Email.uidvalidity == int(parts[1]), Email.uid == int(parts[2]))
+        )
+        if e is not None:
+            return e
+    return db.scalar(select(Email).where(Email.message_id == doc_id))
+
+
+def _safe_name(name: str | None, idx: int) -> str:
+    base = re.sub(r"[^\w.\-() ]", "_", (name or "").rsplit("/", 1)[-1]).strip(" .")
+    return base or f"anhang-{idx}"
+
+
+def _attachments(raw: bytes) -> list[tuple[str | None, str, bytes]]:
+    return [(n, c, d) for (n, c, d) in mailparse.iter_attachments(raw) if d]
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
@@ -178,3 +208,82 @@ def email_detail(doc_id: str, user: str = Depends(current_user)) -> dict:
     if not hits:
         raise HTTPException(status_code=404, detail=f"Keine Mail zu '{doc_id}' gefunden.")
     return hits[0]["_source"]
+
+
+@router.get("/emails/{doc_id}/pdf")
+def email_pdf(
+    doc_id: str,
+    load_remote: bool = False,
+    db: Session = Depends(get_session),
+    user: str = Depends(current_user),
+) -> Response:
+    """Rendert die Mail serverseitig als PDF (Quelle: Roh-Mail der zentralen DB)."""
+    e = _email_by_doc_id(db, doc_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail=f"Keine Mail zu '{doc_id}' gefunden.")
+    if not render.WEASYPRINT_OK:
+        raise HTTPException(
+            status_code=503,
+            detail=f"PDF-Rendering nicht verfügbar (WeasyPrint fehlt: {render.WEASYPRINT_ERROR}).",
+        )
+    pdf = render.html_to_pdf(e.raw, load_remote=load_remote)
+    if pdf is None:
+        raise HTTPException(status_code=422, detail="Mail hat keinen darstellbaren Inhalt.")
+    fname = _safe_name(mailparse.subject_of(e.raw) or doc_id, 0)[:120] or "mail"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{fname}.pdf"'},
+    )
+
+
+@router.get("/emails/{doc_id}/attachments")
+def email_attachments(
+    doc_id: str,
+    db: Session = Depends(get_session),
+    user: str = Depends(current_user),
+) -> dict:
+    """Listet die Anhänge einer Mail (Index 1-basiert, stabil zum Download)."""
+    e = _email_by_doc_id(db, doc_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail=f"Keine Mail zu '{doc_id}' gefunden.")
+    items = [
+        {"index": i, "filename": name, "content_type": ctype, "size": len(data)}
+        for i, (name, ctype, data) in enumerate(_attachments(e.raw), start=1)
+    ]
+    return {"count": len(items), "attachments": items}
+
+
+@router.get("/emails/{doc_id}/attachments/{index}")
+def email_attachment_download(
+    doc_id: str,
+    index: int,
+    db: Session = Depends(get_session),
+    user: str = Depends(current_user),
+) -> Response:
+    """Lädt einen einzelnen Anhang (1-basiert) herunter."""
+    e = _email_by_doc_id(db, doc_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail=f"Keine Mail zu '{doc_id}' gefunden.")
+    items = _attachments(e.raw)
+    if not 1 <= index <= len(items):
+        raise HTTPException(
+            status_code=404, detail=f"Anhang {index} ungültig — Mail hat {len(items)} Anhang/Anhänge."
+        )
+    name, ctype, data = items[index - 1]
+    fname = _safe_name(name, index)
+    return Response(
+        content=data,
+        media_type=ctype or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.get("/stats/summary")
+def stats_summary(
+    top: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_session),
+    user: str = Depends(current_user),
+) -> dict:
+    """Statistik fürs Dashboard (serverseitig aggregiert)."""
+    return compute_summary(db, top)

@@ -30,8 +30,8 @@ def _parse_dt(value: str | None) -> datetime | None:
         return None
 
 
-@router.get("/summary")
-def summary(top: int = Query(default=10), db: Session = Depends(get_session)) -> dict:
+def compute_summary(db: Session, top: int = 10) -> dict:
+    """Aggregiert die Mail-Statistik. Wiederverwendbar (CLI-Vertrag + client-API)."""
     rows = db.execute(
         select(
             Email.date_header, Email.internaldate, Email.from_addr, Email.size
@@ -67,3 +67,8 @@ def summary(top: int = Query(default=10), db: Session = Depends(get_session)) ->
         "per_weekday": dict(weekdays),
         "top_senders": [[name, cnt] for name, cnt in senders.most_common(top)],
     }
+
+
+@router.get("/summary")
+def summary(top: int = Query(default=10), db: Session = Depends(get_session)) -> dict:
+    return compute_summary(db, top)
