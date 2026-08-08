@@ -99,6 +99,28 @@ def test_auth_and_search(monkeypatch):
         assert c.get("/api/auth/me").status_code == 401
 
 
+def test_api_accounts_crud():
+    with TestClient(app) as c:
+        assert c.get("/api/accounts").status_code == 401  # ohne Session gesperrt
+        c.post("/api/auth/login", json={"username": "admin", "password": "s3cret"})
+
+        acc = {
+            "name": "webk", "imap_host": "mail.x", "imap_user": "u", "imap_password": "p",
+            "folders": "INBOX", "es_host": "http://es:9200", "es_user": "elastic",
+            "es_password": "espw",
+        }
+        assert c.post("/api/accounts", json=acc).status_code == 201
+        row = next(x for x in c.get("/api/accounts").json() if x["name"] == "webk")
+        assert row["es_host"] == "http://es:9200"
+        assert row["es_password_set"] is True and "es_password" not in row
+
+        assert c.patch("/api/accounts/webk", json={"imap_user": "u2"}).status_code == 200
+        assert next(x for x in c.get("/api/accounts").json() if x["name"] == "webk")["imap_user"] == "u2"
+
+        assert c.delete("/api/accounts/webk").json() == {"deleted": "webk"}
+        assert not any(x["name"] == "webk" for x in c.get("/api/accounts").json())
+
+
 def test_search_es_unreachable(monkeypatch):
     from elastic_transport import ConnectionError as ESConnectionError
 
