@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from elastic_transport import ConnectionError as ESConnectionError
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app import __version__
 from app.config import settings
@@ -35,6 +37,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(ESConnectionError)
+async def _es_unreachable(_request: Request, _exc: ESConnectionError) -> JSONResponse:
+    """Elasticsearch nicht erreichbar → sauberes 503 statt 500-Stacktrace.
+
+    Typische Ursache im Docker-Betrieb: ``ES_HOST=localhost`` zeigt auf den
+    Container selbst. Für ES auf dem Host ``host.docker.internal`` verwenden.
+    """
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Suchindex (Elasticsearch) nicht erreichbar."},
+    )
 
 
 @app.get("/health", tags=["meta"])
