@@ -22,11 +22,31 @@ services:
       timeout: 3s
       retries: 10
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: info@microtronix.de
+      PGADMIN_DEFAULT_PASSWORD: ${POSTGRES_PASSWORD:-mailarc}
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "8070:80"
+    depends_on:
+      - db
+
   server:
     build: .
     depends_on:
       db:
         condition: service_healthy
+    # Die komplette .env in den Container geben — so gelangen auch WEB_* (Web-Login)
+    # und ES_* (Suche der client-API) hinein. Ohne diese Zeile blieben sie außen vor
+    # (Login "gesperrt", Suche ohne Ziel). Gleichnamige Keys aus `environment:` unten
+    # haben Vorrang und bleiben damit compose-spezifisch korrekt (z. B. DATABASE_URL).
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg://mailarc:${POSTGRES_PASSWORD:-mailarc}@db:5432/mailarc
       # Müssen gesetzt sein (in der .env neben dieser Datei) — sonst bricht Compose ab.
@@ -39,3 +59,4 @@ services:
 
 volumes:
   pgdata:
+  pgadmin_data:
