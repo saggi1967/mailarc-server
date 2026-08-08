@@ -99,6 +99,21 @@ def test_auth_and_search(monkeypatch):
         assert c.get("/api/auth/me").status_code == 401
 
 
+def test_search_es_unreachable(monkeypatch):
+    from elastic_transport import ConnectionError as ESConnectionError
+
+    class DeadES:
+        def search(self, **_kw):
+            raise ESConnectionError("connection refused")
+
+    monkeypatch.setattr(es, "client", lambda: DeadES())
+    with TestClient(app) as c:
+        c.post("/api/auth/login", json={"username": "admin", "password": "s3cret"})
+        r = c.get("/api/search?q=x")
+        assert r.status_code == 503
+        assert "Elasticsearch" in r.json()["detail"]
+
+
 def _insert_sample_email() -> bytes:
     """Legt Mailbox + eine Mail (HTML-Body + ein Anhang) direkt in der DB an."""
     from email.message import EmailMessage
