@@ -4,7 +4,7 @@
 
 **Zentrale REST-Gegenstelle für den [imap-archiver](https://github.com/saggi1967/imap-archiver) — verschlüsselte IMAP-Konten und gemeinsame Mail-Ablage.**
 
-[![Version](https://img.shields.io/badge/version-2.3.0.0-blue)](#)
+[![Version](https://img.shields.io/badge/version-2.4.0.0-blue)](#)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](#)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](#)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00)](#)
@@ -39,6 +39,7 @@ Ablage sammeln statt jeweils in lokale SQLite-Dateien.
 - [Docker](#docker)
 - [Konfiguration](#konfiguration)
 - [API-Endpunkte](#api-endpunkte)
+- [client-API & Web-Frontend](#client-api--web-frontend)
 - [Designprinzipien](#designprinzipien)
 - [Datenmodell](#datenmodell)
 - [Tests](#tests)
@@ -59,6 +60,7 @@ Ablage sammeln statt jeweils in lokale SQLite-Dateien.
 | 🔒 | **Per-Ordner-Locks** – Advisory-Lease mit TTL, läuft bei Absturz automatisch ab |
 | 📊 | **Serverseitige Statistik** – Aggregation in der DB statt alle Zeilen zum Client zu ziehen |
 | 🐘 | **DB-agnostisch** – SQLite out-of-the-box, Postgres im Betrieb (reiner `DATABASE_URL`-Wechsel) |
+| 🖥️ | **client-API (`/api`)** – Suche, Mail-Detail, PDF, Anhänge, Statistik für Web-UI/Rich-Client; **Session-Cookie-Auth** getrennt vom CLI-Bearer-Token |
 
 ## Schnellstart
 
@@ -99,6 +101,12 @@ docker compose up -d --build       # Server auf http://localhost:9000 (Container
 Der Server startet erst, wenn Postgres `healthy` ist (`depends_on: condition: service_healthy`).
 Fehlt `API_TOKEN` oder `SECRET_KEY`, bricht Compose bewusst mit klarer Meldung ab.
 
+> Der `server`-Service bindet die `.env` per **`env_file`** ein — dadurch gelangen auch
+> **`WEB_*`** (Web-Login) und **`ES_*`** (Suche) in den Container. Für den Web-Login also
+> `WEB_PASSWORD` in dieselbe `.env` schreiben; `ES_HOST` im Container auf
+> `host.docker.internal` (Host-ES) bzw. den ES-Service-Namen zeigen lassen, **nicht**
+> `localhost`.
+
 Nur das Server-Image (mit eigener DB):
 
 ```bash
@@ -121,6 +129,15 @@ Vorlage: [`.env.example`](.env.example).
 | `LOCK_TTL_SECONDS` | `300` | Lease-Dauer der Per-Ordner-Sync-Locks |
 | `MAX_PAGE_LIMIT` | `1000` | Obergrenze der Seitengröße für `GET /emails` |
 | `JOB_COMMIT_EVERY` | `200` | Fortschritt eines Sync-Jobs alle N Mails persistieren |
+| `WEB_USERNAME` | `admin` | Benutzername für den Web-Login (client-API) |
+| `WEB_PASSWORD` | – | **Für Web-Login Pflicht.** Leer = Login deaktiviert („Login gesperrt") |
+| `WEB_ORIGINS` | `http://localhost:5173` | Erlaubte Frontend-Origins (CORS, Komma-getrennt) |
+| `WEB_SESSION_TTL` | `43200` | Gültigkeit des Session-Cookies in Sekunden (12 h) |
+| `WEB_COOKIE_SECURE` / `WEB_COOKIE_SAMESITE` | `false` / `lax` | Cookie-Flags; hinter HTTPS `true`, bei fremder Domain `none` |
+| `ES_HOST` / `ES_USER` / `ES_PASSWORD` | `http://localhost:9200` / `elastic` / – | Elasticsearch für `/api/search` (gleiche Instanz/Index wie der CLI-Indexlauf) |
+| `ES_INDEX` / `ES_VERIFY_CERTS` | `emails` / `true` | Ziel-Index; TLS-Prüfung (nur bei https) |
+
+> 🖥️ **Web-Login aktivieren:** `WEB_PASSWORD` setzen (und `ES_*` für die Suche), dann Server neu starten. Ohne `WEB_PASSWORD` meldet das Frontend „Login gesperrt". Im Docker-Container ist `localhost` der Container selbst — für ES auf dem Host `host.docker.internal` verwenden.
 
 `SECRET_KEY` erzeugen:
 
@@ -133,8 +150,11 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 ## API-Endpunkte
 
-Alle fachlichen Endpunkte erfordern den Header `Authorization: Bearer <API_TOKEN>`.
-Fehler kommen als `{"detail": "..."}`; interaktive Doku unter `/docs`.
+Zwei getrennte Verträge: der **interne CLI-Vertrag** (Bearer-Token, für den
+`imap-archiver`-Client) und die **client-API `/api`** (Session-Cookie, für Web-UI
+und Rich-Clients — siehe [nächster Abschnitt](#client-api--web-frontend)). Die
+CLI-Endpunkte erfordern `Authorization: Bearer <API_TOKEN>`. Fehler kommen als
+`{"detail": "..."}`; interaktive Doku unter `/docs`.
 
 | Bereich | Endpunkte |
 |---|---|
@@ -147,6 +167,44 @@ Fehler kommen als `{"detail": "..."}`; interaktive Doku unter `/docs`.
 
 `GET /accounts/{name}/credentials` ist der einzige Endpunkt, der das Passwort
 **entschlüsselt** ausliefert — der Client lädt es kurz vor dem read-only IMAP-Zugriff.
+
+## client-API & Web-Frontend
+
+Unter dem Präfix **`/api`** liegt eine **client-neutrale** API für ein Web-Frontend
+([`mailarc-web`](https://github.com/saggi1967/mailarc-web), React + Material UI) und
+künftige Rich-Clients. Statt des statischen Bearer-Tokens nutzt sie ein **signiertes
+httpOnly-Session-Cookie** (HMAC über `SECRET_KEY`) — kein Token im Browser-JavaScript.
+
+| Bereich | Endpunkte |
+|---|---|
+| **Auth** | `POST /api/auth/login` · `GET /api/auth/me` · `POST /api/auth/logout` |
+| **Suche** | `GET /api/search` (Filter, Pagination, Highlight) · `GET /api/search/count` · `GET /api/search/top` |
+| **Einzelmail** | `GET /api/emails/{id}` (Detail) · `GET /api/emails/{id}/pdf` · `GET /api/emails/{id}/attachments` (+ `/{n}`) |
+| **Statistik** | `GET /api/stats/summary` |
+
+Voraussetzungen für den Betrieb:
+
+1. **`WEB_PASSWORD`** setzen (sonst ist der Login deaktiviert), optional `WEB_USERNAME`.
+2. **`ES_*`** auf die Elasticsearch-Instanz mit dem indexierten `emails`-Index zeigen
+   lassen (die `/api/search`-Logik entspricht 1:1 der CLI-Suche).
+3. **`WEB_ORIGINS`** auf die Frontend-URL setzen (Default deckt den Vite-Dev-Server
+   `http://localhost:5173` ab). CORS läuft mit `credentials`, das Cookie wird gesetzt.
+
+```bash
+# .env des Servers (Auszug)
+WEB_USERNAME=admin
+WEB_PASSWORD=<geheim>
+WEB_ORIGINS=http://localhost:5173
+ES_HOST=http://localhost:9200   # im Container: host.docker.internal
+ES_USER=elastic
+ES_PASSWORD=<geheim>
+ES_INDEX=emails
+```
+
+Das **PDF-Rendering** (`/api/emails/{id}/pdf`) braucht WeasyPrint samt nativer Libs;
+optional installieren mit `pip install -e ".[pdf]"` (fehlt es, antwortet der Endpunkt
+sauber mit `503`). Das Frontend liegt im eigenen Repo `mailarc-web` und wird über
+`VITE_API_BASE` auf diesen Server gezeigt.
 
 ## Designprinzipien
 
@@ -243,9 +301,13 @@ mailarc-server/
 │   ├── models.py          # ORM: account, mailbox, email, sync_job, staging, lock
 │   ├── schemas.py         # Pydantic-Modelle (Client-Vertrag)
 │   ├── security.py        # Bearer-Auth + Fernet-Verschlüsselung
+│   ├── webauth.py         # client-API: Session-Cookie-Auth (HMAC)
+│   ├── es.py              # client-API: Elasticsearch-Client + build_query
+│   ├── render.py          # client-API: Mail → PDF (WeasyPrint, optional)
+│   ├── mailparse.py       # client-API: Anhänge/Decode aus der Roh-Mail
 │   ├── jobs.py            # async Sync-Job-Verarbeitung aus dem Staging
-│   └── routers/           # accounts · mailboxes · emails · sync_jobs · stats
-├── tests/test_smoke.py    # End-to-End-Test über den kompletten Vertrag
+│   └── routers/           # accounts · mailboxes · emails · sync_jobs · stats · client (/api)
+├── tests/                 # test_smoke.py (CLI-Vertrag) · test_client_api.py (/api)
 ├── Dockerfile
 ├── docker-compose.yml     # Server + Postgres
 └── pyproject.toml
