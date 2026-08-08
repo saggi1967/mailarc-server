@@ -19,7 +19,9 @@ from app import es, mailparse, render
 from app.config import settings
 from app.db import get_session
 from app.models import Email, Mailbox
+from app.routers import accounts as accounts_router
 from app.routers.stats import compute_summary
+from app.schemas import AccountCreate, AccountOut, AccountUpdate
 from app.webauth import COOKIE_NAME, check_login, current_user, issue_token
 
 router = APIRouter(prefix="/api", tags=["client"])
@@ -287,3 +289,38 @@ def stats_summary(
 ) -> dict:
     """Statistik fürs Dashboard (serverseitig aggregiert)."""
     return compute_summary(db, top)
+
+
+# ── Kontenverwaltung (cookie-authentifiziert) ────────────────────────────────
+# Reicht die getestete CRUD-Logik aus routers/accounts.py durch — hier aber hinter
+# der Web-Session statt dem statischen Bearer-Token. Direktaufruf mit explizitem
+# `db` umgeht das dortige Depends.
+@router.get("/accounts", response_model=list[AccountOut])
+def api_accounts_list(
+    db: Session = Depends(get_session), user: str = Depends(current_user)
+) -> list[dict]:
+    return accounts_router.list_accounts(db=db)
+
+
+@router.post("/accounts", response_model=AccountOut, status_code=201)
+def api_accounts_create(
+    body: AccountCreate, db: Session = Depends(get_session), user: str = Depends(current_user)
+) -> dict:
+    return accounts_router.create_account(body=body, db=db)
+
+
+@router.patch("/accounts/{name}", response_model=AccountOut)
+def api_accounts_update(
+    name: str,
+    body: AccountUpdate,
+    db: Session = Depends(get_session),
+    user: str = Depends(current_user),
+) -> dict:
+    return accounts_router.update_account(name=name, body=body, db=db)
+
+
+@router.delete("/accounts/{name}")
+def api_accounts_delete(
+    name: str, db: Session = Depends(get_session), user: str = Depends(current_user)
+) -> dict:
+    return accounts_router.delete_account(name=name, db=db)
