@@ -25,6 +25,7 @@ from app.schemas import (
     AccountCreate,
     AccountOut,
     AccountUpdate,
+    PasswordChange,
     UserCreate,
     UserOut,
     UserUpdate,
@@ -98,6 +99,16 @@ def logout(response: Response) -> dict:
     # Bewusst ohne Auth-Zwang: ein abgelaufenes Cookie soll sich trotzdem löschen lassen.
     response.delete_cookie(COOKIE_NAME, path="/")
     return {"ok": True}
+
+
+@router.post("/auth/password")
+def change_password(
+    body: PasswordChange,
+    db: Session = Depends(get_session),
+    user: str = Depends(current_user),
+) -> dict:
+    """Self-Service: eigenes Passwort ändern (für alle angemeldeten Benutzer)."""
+    return webusers.change_own_password(db, user, body.current_password, body.new_password)
 
 
 # ── Suche ────────────────────────────────────────────────────────────────────

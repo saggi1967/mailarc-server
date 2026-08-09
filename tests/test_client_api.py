@@ -133,6 +133,30 @@ def test_user_management():
         assert c.patch("/api/users/admin", json={"role": "user"}).status_code == 400
 
 
+def test_self_password_change():
+    with TestClient(app) as c:
+        c.post("/api/auth/login", json={"username": "admin", "password": "s3cret"})
+        c.post("/api/users", json={"username": "carla", "password": "pw", "role": "user"})
+
+    with TestClient(app) as cc:
+        # ohne Session gesperrt
+        assert cc.post("/api/auth/password", json={"current_password": "x", "new_password": "y"}).status_code == 401
+        cc.post("/api/auth/login", json={"username": "carla", "password": "pw"})
+        # falsches aktuelles Passwort → 400
+        assert cc.post("/api/auth/password", json={"current_password": "falsch", "new_password": "neu12345"}).status_code == 400
+        # korrekt → 200
+        assert cc.post("/api/auth/password", json={"current_password": "pw", "new_password": "neu12345"}).json() == {"ok": True}
+
+    with TestClient(app) as cc:
+        # altes Passwort funktioniert nicht mehr, neues schon
+        assert cc.post("/api/auth/login", json={"username": "carla", "password": "pw"}).status_code == 401
+        assert cc.post("/api/auth/login", json={"username": "carla", "password": "neu12345"}).status_code == 200
+
+    with TestClient(app) as c:
+        c.post("/api/auth/login", json={"username": "admin", "password": "s3cret"})
+        c.delete("/api/users/carla")
+
+
 def test_api_accounts_crud():
     with TestClient(app) as c:
         assert c.get("/api/accounts").status_code == 401  # ohne Session gesperrt

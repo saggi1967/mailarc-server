@@ -117,6 +117,23 @@ def update_user(
     return _out(u)
 
 
+def change_own_password(db: Session, username: str, current_password: str, new_password: str) -> dict:
+    """Self-Service: der angemeldete Benutzer ändert sein eigenes Passwort.
+
+    Das aktuelle Passwort muss bestätigt werden (Schutz bei übernommener Session).
+    """
+    if not new_password:
+        raise HTTPException(status_code=422, detail="Neues Passwort ist erforderlich.")
+    u = get_active(db, username)
+    if u is None:  # Session gültig, aber Benutzer inzwischen weg/deaktiviert
+        raise HTTPException(status_code=404, detail="Benutzer nicht gefunden.")
+    if not verify_password(current_password, u.password_hash):
+        raise HTTPException(status_code=400, detail="Aktuelles Passwort ist falsch.")
+    u.password_hash = hash_password(new_password)
+    db.flush()
+    return {"ok": True}
+
+
 def delete_user(db: Session, username: str, acting: str) -> dict:
     u = get(db, username)
     if u is None:
