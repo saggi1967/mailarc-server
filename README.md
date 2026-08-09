@@ -4,7 +4,7 @@
 
 **Zentrale REST-Gegenstelle für den [imap-archiver](https://github.com/saggi1967/imap-archiver) — verschlüsselte IMAP-Konten und gemeinsame Mail-Ablage.**
 
-[![Version](https://img.shields.io/badge/version-2.5.0.0-blue)](#)
+[![Version](https://img.shields.io/badge/version-2.6.0.0-blue)](#)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](#)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](#)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00)](#)
@@ -182,6 +182,7 @@ httpOnly-Session-Cookie** (HMAC über `SECRET_KEY`) — kein Token im Browser-Ja
 | **Einzelmail** | `GET /api/emails/{id}` (Detail) · `GET /api/emails/{id}/pdf` · `GET /api/emails/{id}/attachments` (+ `/{n}`) |
 | **Statistik** | `GET /api/stats/summary` |
 | **Konten** | `GET/POST /api/accounts` · `PATCH/DELETE /api/accounts/{name}` (Kontenverwaltung im UI) |
+| **Benutzer** *(nur Admin)* | `GET/POST /api/users` · `PATCH/DELETE /api/users/{username}` (Web-Benutzer verwalten) |
 
 Voraussetzungen für den Betrieb:
 
@@ -201,6 +202,13 @@ ES_USER=elastic
 ES_PASSWORD=<geheim>
 ES_INDEX=emails
 ```
+
+**Benutzer & Rollen:** Web-Benutzer liegen in der Tabelle `web_user` (Passwort
+PBKDF2-gehasht), Rolle `admin` oder `user`. Beim ersten Start wird aus
+`WEB_USERNAME`/`WEB_PASSWORD` **einmalig ein Admin geseedet** (danach über
+`/api/users` verwaltet — `WEB_PASSWORD` ändert den Admin nicht mehr). Nur Admins
+verwalten Benutzer; der **letzte aktive Admin** lässt sich nicht löschen,
+deaktivieren oder herabstufen, und man kann sich nicht selbst löschen.
 
 Das **PDF-Rendering** (`/api/emails/{id}/pdf`) braucht WeasyPrint samt nativer Libs;
 optional installieren mit `pip install -e ".[pdf]"` (fehlt es, antwortet der Endpunkt

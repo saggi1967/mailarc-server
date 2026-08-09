@@ -17,9 +17,13 @@ import hmac
 import json
 import time
 
-from fastapi import Cookie, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
+from app import webusers
 from app.config import settings
+from app.db import get_session
+from app.models import WebUser
 
 COOKIE_NAME = "mailarc_session"
 
@@ -61,22 +65,28 @@ def verify_token(token: str) -> str | None:
         return None
 
 
-def check_login(username: str, password: str) -> bool:
-    """Konstantzeit-Vergleich gegen die konfigurierten Zugangsdaten."""
-    if not settings.WEB_PASSWORD:
-        raise HTTPException(
-            status_code=500, detail="WEB_PASSWORD ist serverseitig nicht gesetzt (Login deaktiviert)."
-        )
-    ok_user = hmac.compare_digest(username, settings.WEB_USERNAME)
-    ok_pass = hmac.compare_digest(password, settings.WEB_PASSWORD)
-    return ok_user and ok_pass
+def current_web_user(
+    mailarc_session: str | None = Cookie(default=None),
+    db: Session = Depends(get_session),
+) -> WebUser:
+    """FastAPI-Dependency: gültige Session UND der Benutzer existiert und ist aktiv.
+
+    So verliert ein gelöschter oder deaktivierter Benutzer seine Session sofort.
+    """
+    username = verify_token(mailarc_session) if mailarc_session else None
+    user = webusers.get_active(db, username) if username else None
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nicht angemeldet.")
+    return user
 
 
-def current_user(mailarc_session: str | None = Cookie(default=None)) -> str:
-    """FastAPI-Dependency: erzwingt eine gültige Session, liefert den Benutzernamen."""
-    user = verify_token(mailarc_session) if mailarc_session else None
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Nicht angemeldet."
-        )
+def current_user(user: WebUser = Depends(current_web_user)) -> str:
+    """Benutzername der aktiven Session (für Endpunkte ohne Rollenprüfung)."""
+    return user.username
+
+
+def require_admin(user: WebUser = Depends(current_web_user)) -> WebUser:
+    """Erzwingt die Admin-Rolle (für die Benutzerverwaltung)."""
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Nur für Admins.")
     return user

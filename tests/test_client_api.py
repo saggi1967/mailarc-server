@@ -74,7 +74,7 @@ def test_auth_and_search(monkeypatch):
         assert "mailarc_session" in r.cookies  # httpOnly-Cookie gesetzt
 
         # -- Session gilt (TestClient hält das Cookie) -------------------
-        assert c.get("/api/auth/me").json() == {"user": "admin"}
+        assert c.get("/api/auth/me").json() == {"user": "admin", "role": "admin"}
 
         # -- Suche -------------------------------------------------------
         res = c.get("/api/search?q=Rechnung&from=billing@apple.com&limit=10").json()
@@ -97,6 +97,40 @@ def test_auth_and_search(monkeypatch):
         # -- Logout entzieht den Zugang ----------------------------------
         assert c.post("/api/auth/logout").json() == {"ok": True}
         assert c.get("/api/auth/me").status_code == 401
+
+
+def test_user_management():
+    with TestClient(app) as c:
+        assert c.get("/api/users").status_code == 401  # ohne Session
+        c.post("/api/auth/login", json={"username": "admin", "password": "s3cret"})
+
+        # Geseedeter Admin ist da.
+        users = c.get("/api/users").json()
+        assert {"username": "admin", "role": "admin", "is_active": True} in users
+
+        # Anlegen (normaler Benutzer)
+        assert c.post("/api/users", json={"username": "bob", "password": "pw", "role": "user"}).status_code == 201
+        assert c.post("/api/users", json={"username": "bob", "password": "x"}).status_code == 409  # Duplikat
+
+        # bob darf sich einloggen, aber KEINE Benutzer verwalten (403)
+        with TestClient(app) as cb:
+            cb.post("/api/auth/login", json={"username": "bob", "password": "pw"})
+            assert cb.get("/api/auth/me").json() == {"user": "bob", "role": "user"}
+            assert cb.get("/api/users").status_code == 403
+            assert cb.post("/api/users", json={"username": "x", "password": "y"}).status_code == 403
+
+        # Ändern: Passwort + zur Admin-Rolle
+        assert c.patch("/api/users/bob", json={"role": "admin", "password": "pw2"}).status_code == 200
+        with TestClient(app) as cb:
+            assert cb.post("/api/auth/login", json={"username": "bob", "password": "pw2"}).status_code == 200
+
+        # Absicherungen: sich selbst nicht löschen; letzten Admin nicht entmachten
+        assert c.delete("/api/users/admin").status_code == 400  # admin ist eingeloggt = self
+        # bob (jetzt Admin) löschen ist ok, da admin bleibt
+        assert c.delete("/api/users/bob").json() == {"deleted": "bob"}
+        # jetzt ist admin der letzte aktive Admin → nicht deaktivierbar/herabstufbar
+        assert c.patch("/api/users/admin", json={"is_active": False}).status_code == 400
+        assert c.patch("/api/users/admin", json={"role": "user"}).status_code == 400
 
 
 def test_api_accounts_crud():

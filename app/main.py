@@ -13,9 +13,9 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app import __version__
+from app import __version__, webusers
 from app.config import settings
-from app.db import init_db
+from app.db import SessionLocal, init_db
 from app.routers import accounts, client, emails, mailboxes, stats, sync_jobs
 from app.security import require_token
 
@@ -23,6 +23,9 @@ from app.security import require_token
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    # Ersten Admin aus WEB_USERNAME/WEB_PASSWORD anlegen, falls noch keine Benutzer.
+    with SessionLocal() as db:
+        webusers.ensure_seed_admin(db)
     yield
 
 
