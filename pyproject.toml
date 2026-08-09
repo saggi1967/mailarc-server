@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mailarc-server"
-version = "2.6.0.0"
+version = "2.6.1.0"
 description = "Zentrale REST-Gegenstelle (Konten + Mail-Ablage) für den imap-archiver-Client"
 requires-python = ">=3.11"
 dependencies = [

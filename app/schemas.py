@@ -117,6 +117,11 @@ class UserOut(BaseModel):
     is_active: bool
 
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
 # ── Mailboxes ───────────────────────────────────────────────────────────────
 class MailboxCreate(BaseModel):
     name: str

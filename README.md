@@ -4,7 +4,7 @@
 
 **Zentrale REST-Gegenstelle für den [imap-archiver](https://github.com/saggi1967/imap-archiver) — verschlüsselte IMAP-Konten und gemeinsame Mail-Ablage.**
 
-[![Version](https://img.shields.io/badge/version-2.6.0.0-blue)](#)
+[![Version](https://img.shields.io/badge/version-2.6.1.0-blue)](#)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](#)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](#)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00)](#)
@@ -177,7 +177,7 @@ httpOnly-Session-Cookie** (HMAC über `SECRET_KEY`) — kein Token im Browser-Ja
 
 | Bereich | Endpunkte |
 |---|---|
-| **Auth** | `POST /api/auth/login` · `GET /api/auth/me` · `POST /api/auth/logout` |
+| **Auth** | `POST /api/auth/login` · `GET /api/auth/me` · `POST /api/auth/logout` · `POST /api/auth/password` (eigenes Passwort ändern) |
 | **Suche** | `GET /api/search` (Filter, Pagination, Highlight) · `GET /api/search/count` · `GET /api/search/top` |
 | **Einzelmail** | `GET /api/emails/{id}` (Detail) · `GET /api/emails/{id}/pdf` · `GET /api/emails/{id}/attachments` (+ `/{n}`) |
 | **Statistik** | `GET /api/stats/summary` |
