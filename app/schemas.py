@@ -98,6 +98,25 @@ class ProfileConfigOut(CredentialsOut):
     attachment_max_chars: int | None = None
 
 
+# ── Web-Benutzer (client-API) ────────────────────────────────────────────────
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    role: str = "user"  # "admin" | "user"
+
+
+class UserUpdate(BaseModel):
+    password: str | None = None
+    role: str | None = None
+    is_active: bool | None = None
+
+
+class UserOut(BaseModel):
+    username: str
+    role: str
+    is_active: bool
+
+
 # ── Mailboxes ───────────────────────────────────────────────────────────────
 class MailboxCreate(BaseModel):
     name: str

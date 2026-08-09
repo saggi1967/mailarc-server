@@ -15,14 +15,27 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import es, mailparse, render
+from app import es, mailparse, render, webusers
 from app.config import settings
 from app.db import get_session
-from app.models import Email, Mailbox
+from app.models import Email, Mailbox, WebUser
 from app.routers import accounts as accounts_router
 from app.routers.stats import compute_summary
-from app.schemas import AccountCreate, AccountOut, AccountUpdate
-from app.webauth import COOKIE_NAME, check_login, current_user, issue_token
+from app.schemas import (
+    AccountCreate,
+    AccountOut,
+    AccountUpdate,
+    UserCreate,
+    UserOut,
+    UserUpdate,
+)
+from app.webauth import (
+    COOKIE_NAME,
+    current_user,
+    current_web_user,
+    issue_token,
+    require_admin,
+)
 
 router = APIRouter(prefix="/api", tags=["client"])
 
@@ -59,24 +72,25 @@ class LoginIn(BaseModel):
 
 
 @router.post("/auth/login")
-def login(body: LoginIn, response: Response) -> dict:
-    if not check_login(body.username, body.password):
+def login(body: LoginIn, response: Response, db: Session = Depends(get_session)) -> dict:
+    user = webusers.authenticate(db, body.username, body.password)
+    if user is None:
         raise HTTPException(status_code=401, detail="Ungültige Zugangsdaten.")
     response.set_cookie(
         COOKIE_NAME,
-        issue_token(body.username),
+        issue_token(user.username),
         max_age=settings.WEB_SESSION_TTL,
         httponly=True,
         secure=settings.WEB_COOKIE_SECURE,
         samesite=settings.WEB_COOKIE_SAMESITE,
         path="/",
     )
-    return {"user": body.username}
+    return {"user": user.username, "role": user.role}
 
 
 @router.get("/auth/me")
-def me(user: str = Depends(current_user)) -> dict:
-    return {"user": user}
+def me(user: WebUser = Depends(current_web_user)) -> dict:
+    return {"user": user.username, "role": user.role}
 
 
 @router.post("/auth/logout")
@@ -324,3 +338,40 @@ def api_accounts_delete(
     name: str, db: Session = Depends(get_session), user: str = Depends(current_user)
 ) -> dict:
     return accounts_router.delete_account(name=name, db=db)
+
+
+# ── Benutzerverwaltung (nur Admins) ──────────────────────────────────────────
+@router.get("/users", response_model=list[UserOut])
+def api_users_list(
+    db: Session = Depends(get_session), admin: WebUser = Depends(require_admin)
+) -> list[dict]:
+    return webusers.list_users(db)
+
+
+@router.post("/users", response_model=UserOut, status_code=201)
+def api_users_create(
+    body: UserCreate, db: Session = Depends(get_session), admin: WebUser = Depends(require_admin)
+) -> dict:
+    return webusers.create_user(db, body.username, body.password, body.role)
+
+
+@router.patch("/users/{username}", response_model=UserOut)
+def api_users_update(
+    username: str,
+    body: UserUpdate,
+    db: Session = Depends(get_session),
+    admin: WebUser = Depends(require_admin),
+) -> dict:
+    return webusers.update_user(
+        db, username, acting=admin.username,
+        password=body.password, role=body.role, is_active=body.is_active,
+    )
+
+
+@router.delete("/users/{username}")
+def api_users_delete(
+    username: str,
+    db: Session = Depends(get_session),
+    admin: WebUser = Depends(require_admin),
+) -> dict:
+    return webusers.delete_user(db, username, acting=admin.username)
