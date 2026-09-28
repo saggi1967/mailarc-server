@@ -142,3 +142,23 @@ class SyncLock(Base):
     mailbox_name: Mapped[str] = mapped_column(String(1024), primary_key=True)
     lease_id: Mapped[str] = mapped_column(String(64))
     expires_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class IndexJob(Base):
+    """Asynchroner Elasticsearch-Indexlauf. Der Server baut die ES-Dokumente aus
+    den Roh-Mails und schreibt sie nach ES (dort, wo ES erreichbar ist) — der Client
+    stößt den Job nur an und pollt den Fortschritt, analog zu ``SyncJob``.
+    """
+
+    __tablename__ = "index_job"
+
+    tx_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    reindex: Mapped[bool] = mapped_column(default=False)
+    status: Mapped[str] = mapped_column(String(16), default="accepted")  # accepted|running|done|failed
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    processed: Mapped[int] = mapped_column(Integer, default=0)
+    indexed: Mapped[int] = mapped_column(Integer, default=0)
+    failed: Mapped[int] = mapped_column(Integer, default=0)
+    errors: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

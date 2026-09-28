@@ -4,7 +4,7 @@
 
 **Zentrale REST-Gegenstelle für den [imap-archiver](https://github.com/saggi1967/imap-archiver) — verschlüsselte IMAP-Konten und gemeinsame Mail-Ablage.**
 
-[![Version](https://img.shields.io/badge/version-2.6.1.0-blue)](#)
+[![Version](https://img.shields.io/badge/version-2.6.2.0-blue)](#)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](#)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](#)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00)](#)
@@ -55,6 +55,7 @@ Ablage sammeln statt jeweils in lokale SQLite-Dateien.
 | 🔐 | **Verschlüsselte Konten** – IMAP-Passwörter liegen nur als Fernet-Token in der DB |
 | 🔑 | **Bearer-Auth** – jeder fachliche Endpunkt erfordert ein gültiges `API_TOKEN` |
 | 📥 | **Async Sync-Jobs** – Upload landet durable im Staging, `202` + Poll, Verarbeitung entkoppelt |
+| 🔎 | **Server-seitige Indexierung** – `POST /index-jobs` baut die ES-Dokumente (Body-/Anhang-Volltext) aus den Roh-Mails und schreibt sie nach Elasticsearch; der Client braucht keinen ES-Zugang |
 | ♻️ | **Idempotenz** – `(mailbox, uidvalidity, uid)` + `idempotency_key` → keine Duplikate bei Retries |
 | ⏩ | **Watermark nur vorwärts** – `last_uid` per `MAX(...)`, sicher bei parallelem Sync |
 | 🔒 | **Per-Ordner-Locks** – Advisory-Lease mit TTL, läuft bei Absturz automatisch ab |
@@ -134,8 +135,11 @@ Vorlage: [`.env.example`](.env.example).
 | `WEB_ORIGINS` | `http://localhost:5173` | Erlaubte Frontend-Origins (CORS, Komma-getrennt) |
 | `WEB_SESSION_TTL` | `43200` | Gültigkeit des Session-Cookies in Sekunden (12 h) |
 | `WEB_COOKIE_SECURE` / `WEB_COOKIE_SAMESITE` | `false` / `lax` | Cookie-Flags; hinter HTTPS `true`, bei fremder Domain `none` |
-| `ES_HOST` / `ES_USER` / `ES_PASSWORD` | `http://localhost:9200` / `elastic` / – | Elasticsearch für `/api/search` (gleiche Instanz/Index wie der CLI-Indexlauf) |
+| `ES_HOST` / `ES_USER` / `ES_PASSWORD` | `http://localhost:9200` / `elastic` / – | Elasticsearch für `/api/search` **und** die server-seitige Indexierung (`/index-jobs`) |
 | `ES_INDEX` / `ES_VERIFY_CERTS` | `emails` / `true` | Ziel-Index; TLS-Prüfung (nur bei https) |
+| `INDEX_BULK_SIZE` / `INDEX_COMMIT_EVERY` | `500` / `500` | Bulk-Batchgröße bzw. Fortschritts-Commit-Takt des Index-Jobs |
+| `ATTACHMENT_TEXT` | `true` | Anhang-Volltext (PDF/DOCX/XLSX/Text) beim Indexieren extrahieren |
+| `ATTACHMENT_MAX_BYTES` / `ATTACHMENT_MAX_CHARS` | `25000000` / `100000` | größere Anhänge überspringen; extrahierten Text je Mail begrenzen |
 
 > 🖥️ **Web-Login aktivieren:** `WEB_PASSWORD` setzen (und `ES_*` für die Suche), dann Server neu starten. Ohne `WEB_PASSWORD` meldet das Frontend „Login gesperrt". Im Docker-Container ist `localhost` der Container selbst — für ES auf dem Host `host.docker.internal` verwenden.
 
@@ -162,11 +166,21 @@ CLI-Endpunkte erfordern `Authorization: Bearer <API_TOKEN>`. Fehler kommen als
 | **Konten** | `GET/POST /accounts` · `PATCH/DELETE /accounts/{name}` · `GET /accounts/{name}/credentials` |
 | **Ordner** | `GET/POST /mailboxes` · `GET /mailboxes/{name}` · `PATCH /mailboxes/{id}` · `POST/DELETE /mailboxes/{name}/sync-lock` |
 | **Sync** | `POST /sync-jobs` → `202 {tx_id}` · `GET /sync-jobs/{tx_id}` |
+| **Index** | `POST /index-jobs` → `202 {tx_id}` · `GET /index-jobs/{tx_id}` |
 | **Mails** | `GET /emails` · `GET /emails/count` · `PATCH /emails/mark-indexed` · `GET /emails/{mb}/{uidv}/{uid}/raw` · `GET /emails/by-message-id/{mid}/raw` |
 | **Statistik** | `GET /stats/summary` |
 
 `GET /accounts/{name}/credentials` ist der einzige Endpunkt, der das Passwort
 **entschlüsselt** ausliefert — der Client lädt es kurz vor dem read-only IMAP-Zugriff.
+
+**Server-seitige Indexierung (`/index-jobs`).** `POST /index-jobs` (Feld `reindex`
+= alle statt nur ausstehende Mails) startet einen asynchronen Job und liefert
+sofort `202 {tx_id}`. Der Server baut die Suchdokumente inkl. Body- und
+Anhang-Volltext aus den gespeicherten Roh-Mails und schreibt sie per Bulk nach
+Elasticsearch (Index/Mapping legt er selbst an); es läuft **nur ein Lauf
+gleichzeitig**. `GET /index-jobs/{tx_id}` liefert `processed`/`total`/`indexed`/`failed`.
+So braucht der `imap-archiver`-Client keinen eigenen ES-Zugang — ES muss nur vom
+**Server** erreichbar sein (im Docker-Betrieb `host.docker.internal:9200`).
 
 ## client-API & Web-Frontend
 
@@ -299,6 +313,16 @@ docker compose restart server
 > Nach dem ersten Start die `.env`-Passwörter nicht mehr ändern — sonst einen der
 > beiden Wege oben gehen. Im Betrieb ein langes Zufallspasswort verwenden.
 
+### `mailarc index run` scheitert mit `NameResolutionError: host.docker.internal` / `Connection error`
+
+Eine veraltete CLI (< 2.6.0.0) spricht Elasticsearch noch **selbst** an — vom
+Client-Rechner ist das ES des Servers aber nicht erreichbar (es liegt nur auf dem
+Server-Host, `host.docker.internal`/localhost). Ab **Client 2.6.0.0 / Server 2.6.2.0**
+indexiert der Server (`POST /index-jobs`); Client aktualisieren und das Server-Image
+neu bauen/laden. Prüfen, dass der **Server** ES erreicht: `ES_HOST` zeigt im
+Docker-Betrieb auf `host.docker.internal:9200` (die `extra_hosts`-Zeile der
+`docker-compose.yml` macht den Namen auch unter Linux-Docker auflösbar).
+
 ## Projektstruktur
 
 ```
@@ -307,15 +331,17 @@ mailarc-server/
 │   ├── main.py            # FastAPI-App, Lifespan-Schema-Setup, Bearer-Auth
 │   ├── config.py          # Einstellungen (.env)
 │   ├── db.py              # Engine/Session, naive-UTC, SQLite↔Postgres
-│   ├── models.py          # ORM: account, mailbox, email, sync_job, staging, lock
+│   ├── models.py          # ORM: account, mailbox, email, sync_job, staging, lock, index_job
 │   ├── schemas.py         # Pydantic-Modelle (Client-Vertrag)
 │   ├── security.py        # Bearer-Auth + Fernet-Verschlüsselung
 │   ├── webauth.py         # client-API: Session-Cookie-Auth (HMAC)
-│   ├── es.py              # client-API: Elasticsearch-Client + build_query
+│   ├── es.py              # Elasticsearch-Client + build_query + Index-Mapping/ensure_index
+│   ├── indexdoc.py        # Roh-Mail → ES-Dokument (Body-/Anhang-Volltext) für den Indexlauf
+│   ├── attachments.py     # Anhang-Volltext (PDF/DOCX/XLSX/Text) für den Indexlauf
 │   ├── render.py          # client-API: Mail → PDF (WeasyPrint, optional)
 │   ├── mailparse.py       # client-API: Anhänge/Decode aus der Roh-Mail
-│   ├── jobs.py            # async Sync-Job-Verarbeitung aus dem Staging
-│   └── routers/           # accounts · mailboxes · emails · sync_jobs · stats · client (/api)
+│   ├── jobs.py            # async Verarbeitung: Sync-Jobs (Staging) + Index-Jobs (→ ES)
+│   └── routers/           # accounts · mailboxes · emails · sync_jobs · index_jobs · stats · client (/api)
 ├── tests/                 # test_smoke.py (CLI-Vertrag) · test_client_api.py (/api)
 ├── Dockerfile
 ├── docker-compose.yml     # Server + Postgres
@@ -325,8 +351,9 @@ mailarc-server/
 ## Roadmap
 
 - **Alembic-Migrationen** statt `create_all` für versionierte Schema-Änderungen.
-- **Serverseitiger Index-Lauf**, damit `index run` nicht jede Roh-Mail über HTTP zieht
-  (größter Einzelposten laut Konzeptpapier, Abschnitt 7.1).
+- ✅ **Serverseitiger Index-Lauf** (2.6.2.0): `POST /index-jobs` baut die ES-Dokumente
+  aus den zentral gespeicherten Roh-Mails — der Client zieht die Mails nicht mehr über
+  HTTP zurück und braucht keinen ES-Zugang (Konzeptpapier Abschnitt 7.1).
 
 ## Lizenz
 

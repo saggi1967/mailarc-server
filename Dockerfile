@@ -18,4 +18,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --timeout-keep-alive: Leerlauf-Keep-Alive über den uvicorn-Default (5 s) heben.
+# Der Client hält den HTTP-Pool über IMAP-Fetches und Sync-Job-Polls offen; bei 5 s
+# schloss der Server die Leerlaufverbindung, deren Wiederverwendung ergab client-
+# seitig "Connection reset by peer". 75 s überbrückt diese Pausen.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "75"]

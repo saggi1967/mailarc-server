@@ -167,3 +167,8 @@ class SyncJobIn(BaseModel):
 class MarkIndexedIn(BaseModel):
     ids: list[int]
     indexed_at: str
+
+
+class IndexJobIn(BaseModel):
+    # reindex=True: alle Mails neu senden; sonst nur noch nicht indexierte.
+    reindex: bool = False

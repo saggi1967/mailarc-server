@@ -7,3 +7,6 @@ venv/
 *.db
 .pytest_cache/
 .mypy_cache/
+
+# Docker-Image-Artefakte (docker save)
+*.tar.gz

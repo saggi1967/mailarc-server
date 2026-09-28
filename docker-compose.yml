@@ -37,6 +37,9 @@ services:
       - db
 
   server:
+    # Vorgebautes Image (per `docker save`/`docker load` aufs Zielsystem gebracht).
+    # Lokal aus dem Quellcode bauen: `docker compose build server` (nutzt dann `build:`).
+    image: mailarc-server:2.6.2.0
     build: .
     depends_on:
       db:

@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     ES_INDEX: str = "emails"
     ES_VERIFY_CERTS: bool = True
 
+    # --- Indexierung (server-seitig, seit die CLI nicht mehr direkt ES spricht) --
+    # Bulk-Batchgröße und Fortschritts-Commit-Takt des Index-Jobs.
+    INDEX_BULK_SIZE: int = 500
+    INDEX_COMMIT_EVERY: int = 500
+    # Anhang-Volltext: Text aus PDF/DOCX/XLSX/Text extrahieren (wie zuvor im Client).
+    ATTACHMENT_TEXT: bool = True
+    ATTACHMENT_MAX_BYTES: int = 25_000_000  # größere Anhänge überspringen
+    ATTACHMENT_MAX_CHARS: int = 100_000     # extrahierten Text je Mail begrenzen
+
     # --- client-API-Auth (Web-UI / Rich-Client) -----------------------------
     # Leichtgewichtige interne Auth: ein Benutzer, signiertes Session-Cookie
     # (HMAC über SECRET_KEY). Für Mehrbenutzer/Rollen später erweiterbar.

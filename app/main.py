@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from app import __version__, webusers
 from app.config import settings
 from app.db import SessionLocal, init_db
-from app.routers import accounts, client, emails, mailboxes, stats, sync_jobs
+from app.routers import accounts, client, emails, index_jobs, mailboxes, stats, sync_jobs
 from app.security import require_token
 
 
@@ -61,7 +61,7 @@ def health() -> dict:
 
 
 # Interner CLI-Vertrag: alle Router erfordern ein gültiges Bearer-Token.
-for module in (accounts, mailboxes, emails, sync_jobs, stats):
+for module in (accounts, mailboxes, emails, sync_jobs, index_jobs, stats):
     app.include_router(module.router, dependencies=[Depends(require_token)])
 
 # client-API (/api): eigene Session-Cookie-Auth statt Bearer-Token.
