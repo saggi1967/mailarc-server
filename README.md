@@ -4,7 +4,7 @@
 
 **Zentrale REST-Gegenstelle für den [imap-archiver](https://github.com/saggi1967/imap-archiver) — verschlüsselte IMAP-Konten und gemeinsame Mail-Ablage.**
 
-[![Version](https://img.shields.io/badge/version-2.6.2.0-blue)](#)
+[![Version](https://img.shields.io/badge/version-2.6.3.0-blue)](#)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](#)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](#)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00)](#)
@@ -167,6 +167,7 @@ CLI-Endpunkte erfordern `Authorization: Bearer <API_TOKEN>`. Fehler kommen als
 | **Ordner** | `GET/POST /mailboxes` · `GET /mailboxes/{name}` · `PATCH /mailboxes/{id}` · `POST/DELETE /mailboxes/{name}/sync-lock` |
 | **Sync** | `POST /sync-jobs` → `202 {tx_id}` · `GET /sync-jobs/{tx_id}` |
 | **Index** | `POST /index-jobs` → `202 {tx_id}` · `GET /index-jobs/{tx_id}` |
+| **Suche** | `POST /es/search` · `POST /es/count` (read-only ES-Proxy für die CLI, fest auf `ES_INDEX` gescoped) |
 | **Mails** | `GET /emails` · `GET /emails/count` · `PATCH /emails/mark-indexed` · `GET /emails/{mb}/{uidv}/{uid}/raw` · `GET /emails/by-message-id/{mid}/raw` |
 | **Statistik** | `GET /stats/summary` |
 
@@ -181,6 +182,13 @@ Elasticsearch (Index/Mapping legt er selbst an); es läuft **nur ein Lauf
 gleichzeitig**. `GET /index-jobs/{tx_id}` liefert `processed`/`total`/`indexed`/`failed`.
 So braucht der `imap-archiver`-Client keinen eigenen ES-Zugang — ES muss nur vom
 **Server** erreichbar sein (im Docker-Betrieb `host.docker.internal:9200`).
+
+**Such-Proxy für die CLI (`/es/search`, `/es/count`).** Aus demselben Grund sucht die
+CLI nicht mehr selbst: sie baut die ES-Query wie gewohnt und schickt sie an den Server,
+der sie read-only an ES weiterreicht (fest auf `ES_INDEX` gescoped, Bearer-Auth). Damit
+laufen **Sync, Indexierung und Suche** allesamt über den Server — der Client hat für
+nichts mehr einen direkten ES-Zugang. (Die Web-Suche nutzt weiterhin `/api/search` mit
+Session-Cookie.)
 
 ## client-API & Web-Frontend
 
@@ -341,7 +349,7 @@ mailarc-server/
 │   ├── render.py          # client-API: Mail → PDF (WeasyPrint, optional)
 │   ├── mailparse.py       # client-API: Anhänge/Decode aus der Roh-Mail
 │   ├── jobs.py            # async Verarbeitung: Sync-Jobs (Staging) + Index-Jobs (→ ES)
-│   └── routers/           # accounts · mailboxes · emails · sync_jobs · index_jobs · stats · client (/api)
+│   └── routers/           # accounts · mailboxes · emails · sync_jobs · index_jobs · es_query · stats · client (/api)
 ├── tests/                 # test_smoke.py (CLI-Vertrag) · test_client_api.py (/api)
 ├── Dockerfile
 ├── docker-compose.yml     # Server + Postgres
