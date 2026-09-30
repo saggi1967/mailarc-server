@@ -10,3 +10,6 @@ venv/
 
 # Docker-Image-Artefakte (docker save)
 *.tar.gz
+
+# Gebautes mailarc-web-SPA (Build-Artefakt, wird vor dem Docker-Build hierher kopiert)
+web/

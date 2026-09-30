@@ -4,7 +4,7 @@
 
 **Zentrale REST-Gegenstelle für den [imap-archiver](https://github.com/saggi1967/imap-archiver) — verschlüsselte IMAP-Konten und gemeinsame Mail-Ablage.**
 
-[![Version](https://img.shields.io/badge/version-2.6.3.0-blue)](#)
+[![Version](https://img.shields.io/badge/version-2.6.4.0-blue)](#)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](#)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](#)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00)](#)
@@ -101,6 +101,24 @@ docker compose up -d --build       # Server auf http://localhost:9000 (Container
 
 Der Server startet erst, wenn Postgres `healthy` ist (`depends_on: condition: service_healthy`).
 Fehlt `API_TOKEN` oder `SECRET_KEY`, bricht Compose bewusst mit klarer Meldung ab.
+
+### Web-UI (mailarc-web) same-origin
+
+Der Server liefert optional das gebaute **mailarc-web**-SPA aus dem Verzeichnis `./web`
+**same-origin** aus: UI unter `/`, API unter `/api`, `/docs` unverändert. So sind die
+Session-Cookies first-party (`SameSite=Lax`) — **kein CORS, kein HTTPS-Zwang**. Fehlt
+`./web`, läuft der Server unverändert nur als API.
+
+`./web` ist ein **Build-Artefakt** (aus `../mailarc-web/dist`, git-ignoriert). Am
+einfachsten baut das mitgelieferte Skript Frontend + Image in einem Schritt:
+
+```bash
+./build-image.sh                 # npm run build → ./web → docker build (linux/amd64)
+# Ergebnis: mailarc-server:<version> mit eingebettetem UI
+```
+
+Für den `docker save`/`docker load`-Weg aufs Zielsystem reist das UI **im Image** mit —
+danach ist unter `http://<host>:9000/` das Web-UI erreichbar (Login: `WEB_USERNAME`/`WEB_PASSWORD`).
 
 > Der `server`-Service bindet die `.env` per **`env_file`** ein — dadurch gelangen auch
 > **`WEB_*`** (Web-Login) und **`ES_*`** (Suche) in den Container. Für den Web-Login also

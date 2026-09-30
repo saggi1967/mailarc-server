@@ -1,3 +1,3 @@
 """mailarc-server: FastAPI-Service für zentrale IMAP-Konten und Mail-Ablage."""
 
-__version__ = "2.6.3.0"
+__version__ = "2.6.4.0"

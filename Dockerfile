@@ -12,6 +12,10 @@ COPY pyproject.toml ./
 COPY app ./app
 RUN pip install ".[postgres]"
 
+# Gebautes mailarc-web-SPA (aus ../mailarc-web/dist vor dem Build hierher kopiert).
+# Wird von app.main same-origin unter / ausgeliefert (API bleibt unter /api).
+COPY web ./web
+
 EXPOSE 8000
 
 # Health über die Bordmittel des Images (kein curl im slim-Image nötig).

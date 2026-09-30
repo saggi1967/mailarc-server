@@ -6,12 +6,14 @@ hinter Bearer-Auth ein. Start:  uvicorn app.main:app --reload
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 from elastic_transport import ConnectionError as ESConnectionError
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app import __version__, webusers
 from app.config import settings
@@ -75,3 +77,38 @@ for module in (accounts, mailboxes, emails, sync_jobs, index_jobs, es_query, sta
 
 # client-API (/api): eigene Session-Cookie-Auth statt Bearer-Token.
 app.include_router(client.router)
+
+# ── Web-Frontend (mailarc-web) same-origin ausliefern ───────────────────────
+# Das gebaute SPA liegt unter <repo>/web (ins Image kopiert). Same-origin: die API
+# bleibt unter /api, das UI unter / — so sind die Session-Cookies first-party
+# (SameSite=Lax, ohne HTTPS/CORS). Muss NACH allen Routern registriert werden,
+# damit /api & Co. Vorrang vor dem SPA-Fallback haben.
+_WEB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
+# Für diese Präfixe KEIN index.html-Fallback (echtes 404 statt SPA-Seite).
+_API_PREFIXES = {
+    "api", "accounts", "mailboxes", "emails", "sync-jobs", "index-jobs",
+    "es", "stats", "health", "docs", "redoc", "openapi.json",
+}
+
+if os.path.isdir(_WEB_DIR):
+    app.mount(
+        "/assets", StaticFiles(directory=os.path.join(_WEB_DIR, "assets")), name="assets"
+    )
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa(full_path: str) -> FileResponse:
+        """SPA-Auslieferung: echte Dateien direkt, alle App-Routen → index.html.
+
+        React Router macht clientseitiges Routing; ein Reload auf z. B. /search
+        muss daher index.html liefern statt 404.
+        """
+        if full_path.split("/", 1)[0] in _API_PREFIXES:
+            raise HTTPException(status_code=404, detail="Not Found")
+        candidate = os.path.normpath(os.path.join(_WEB_DIR, full_path))
+        if (
+            full_path
+            and candidate.startswith(_WEB_DIR + os.sep)
+            and os.path.isfile(candidate)
+        ):
+            return FileResponse(candidate)
+        return FileResponse(os.path.join(_WEB_DIR, "index.html"))

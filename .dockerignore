@@ -13,3 +13,4 @@ tests
 Dockerfile
 docker-compose.yml
 README.md
+*.tar.gz
