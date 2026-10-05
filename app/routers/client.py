@@ -140,10 +140,10 @@ def _hit_to_item(h: dict) -> dict:
     }
 
 
-@router.get("/search")
-def search(
+def execute_search(
+    *,
     q: str | None = None,
-    frm: str | None = Query(None, alias="from"),
+    frm: str | None = None,
     to: str | None = None,
     domain: str | None = None,
     subject: str | None = None,
@@ -154,11 +154,14 @@ def search(
     since: str | None = None,
     until: str | None = None,
     last: str | None = None,
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    user: str = Depends(current_user),
+    limit: int = 50,
+    offset: int = 0,
 ) -> dict:
-    """Volltextsuche als Server-Proxy vor Elasticsearch (Treffer, paginiert)."""
+    """Server-Proxy-Suche vor Elasticsearch (Treffer, paginiert).
+
+    Gemeinsam genutzt von ``/api/search`` und dem Favoriten-Lauf
+    (``/api/searches/{id}/run``), damit beide exakt dieselbe Suchlogik verwenden.
+    """
     query = es.build_query(
         q, frm, to, domain, subject, file, mailbox, attachments,
         _since_iso(since, last), until, phrase,
@@ -184,6 +187,32 @@ def search(
         "offset": offset,
         "items": [_hit_to_item(h) for h in hits],
     }
+
+
+@router.get("/search")
+def search(
+    q: str | None = None,
+    frm: str | None = Query(None, alias="from"),
+    to: str | None = None,
+    domain: str | None = None,
+    subject: str | None = None,
+    phrase: bool = False,
+    file: str | None = None,
+    mailbox: str | None = None,
+    attachments: bool | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    last: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    user: str = Depends(current_user),
+) -> dict:
+    """Volltextsuche als Server-Proxy vor Elasticsearch (Treffer, paginiert)."""
+    return execute_search(
+        q=q, frm=frm, to=to, domain=domain, subject=subject, phrase=phrase,
+        file=file, mailbox=mailbox, attachments=attachments, since=since,
+        until=until, last=last, limit=limit, offset=offset,
+    )
 
 
 @router.get("/search/count")

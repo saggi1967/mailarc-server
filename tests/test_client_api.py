@@ -179,6 +179,70 @@ def test_api_accounts_crud():
         assert not any(x["name"] == "webk" for x in c.get("/api/accounts").json())
 
 
+def test_saved_searches_crud_and_run(monkeypatch):
+    monkeypatch.setattr(es, "client", lambda: FakeES())
+    with TestClient(app) as c:
+        # ohne Session gesperrt
+        assert c.get("/api/searches").status_code == 401
+        assert c.post("/api/searches", json={"name": "x"}).status_code == 401
+
+        c.post("/api/auth/login", json={"username": "admin", "password": "s3cret"})
+
+        # leere Liste am Anfang
+        assert c.get("/api/searches").json() == []
+
+        # anlegen mit Filtern (inkl. Alias-Feld "from")
+        body = {
+            "name": "Apple-Rechnungen",
+            "params": {"q": "Rechnung", "from": "billing@apple.com", "phrase": True},
+        }
+        r = c.post("/api/searches", json=body)
+        assert r.status_code == 201
+        fav = r.json()
+        sid = fav["id"]
+        assert fav["name"] == "Apple-Rechnungen"
+        # Alias bleibt "from" (nicht "from_"); params exakt wie bei /api/search
+        assert fav["params"]["from"] == "billing@apple.com"
+        assert fav["params"]["q"] == "Rechnung" and fav["params"]["phrase"] is True
+
+        # in der Liste enthalten
+        lst = c.get("/api/searches").json()
+        assert [s["id"] for s in lst] == [sid]
+
+        # Namensdublette → 409
+        assert c.post("/api/searches", json={"name": "Apple-Rechnungen"}).status_code == 409
+
+        # umbenennen + Parameter ändern (PATCH)
+        r = c.patch(f"/api/searches/{sid}", json={"name": "Apple Q3", "params": {"domain": "apple.com"}})
+        assert r.status_code == 200
+        assert r.json()["name"] == "Apple Q3"
+        # phrase ist ein bool mit Default False → immer serialisiert (wie bei /api/search)
+        assert r.json()["params"] == {"domain": "apple.com", "phrase": False}
+
+        # ausführen → nutzt denselben Such-Proxy wie /api/search (FakeES)
+        run = c.post(f"/api/searches/{sid}/run").json()
+        assert run["total"] == 1 and run["count"] == 1
+        assert run["items"][0]["id"] == "INBOX:7:42"
+
+        # fremder Benutzer sieht/ändert den Favoriten nicht (Scope je Besitzer)
+        c.post("/api/users", json={"username": "dora", "password": "pw", "role": "user"})
+        with TestClient(app) as cd:
+            cd.post("/api/auth/login", json={"username": "dora", "password": "pw"})
+            assert cd.get("/api/searches").json() == []            # eigene (leere) Liste
+            assert cd.get(f"/api/searches").status_code == 200
+            assert cd.patch(f"/api/searches/{sid}", json={"name": "hijack"}).status_code == 404
+            assert cd.delete(f"/api/searches/{sid}").status_code == 404
+            assert cd.post(f"/api/searches/{sid}/run").status_code == 404
+
+        # löschen
+        assert c.delete(f"/api/searches/{sid}").json() == {"deleted": sid}
+        assert c.get("/api/searches").json() == []
+        assert c.post(f"/api/searches/{sid}/run").status_code == 404
+
+        # aufräumen
+        c.delete("/api/users/dora")
+
+
 def test_search_es_unreachable(monkeypatch):
     from elastic_transport import ConnectionError as ESConnectionError
 

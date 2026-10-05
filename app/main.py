@@ -25,6 +25,7 @@ from app.routers import (
     es_query,
     index_jobs,
     mailboxes,
+    searches,
     stats,
     sync_jobs,
 )
@@ -77,6 +78,9 @@ for module in (accounts, mailboxes, emails, sync_jobs, index_jobs, es_query, sta
 
 # client-API (/api): eigene Session-Cookie-Auth statt Bearer-Token.
 app.include_router(client.router)
+# Favoriten / gespeicherte Suchen (/api/searches): ebenfalls Session-Cookie-Auth,
+# je Route über current_web_user (benutzergebunden). Muss vor dem SPA-Fallback stehen.
+app.include_router(searches.router)
 
 # ── Web-Frontend (mailarc-web) same-origin ausliefern ───────────────────────
 # Das gebaute SPA liegt unter <repo>/web (ins Image kopiert). Same-origin: die API

@@ -8,11 +8,24 @@ die Versionierung ist vierstellig (PEP 440).
 
 ## [Unreleased]
 
-### In Arbeit
-- **Favoriten / Gespeicherte Suchen (F1)** – neue Tabelle `saved_search` und client-API
-  `GET/POST /api/searches`, `PATCH/DELETE /api/searches/{id}` sowie `POST /api/searches/{id}/run`
-  (Sofort-Ausführung über dieselben Filter wie `/api/search`). Benutzergebunden,
-  Sichtbarkeit standardmäßig privat.
+## [2.7.0.0] – Feature-Branch `feat/favorites-f1` (noch nicht released)
+
+### Hinzugefügt
+- **Favoriten / Gespeicherte Suchen – Feature F1 (Speichern & CRUD), Server-Teil.**
+  Neue Tabelle `saved_search` (benutzergebunden, Name je Benutzer eindeutig) und die
+  client-API unter `/api/searches` (Session-Cookie-Auth, je Route `current_web_user`):
+  - `GET /api/searches` – eigene Favoriten auflisten
+  - `POST /api/searches` – Favorit anlegen (409 bei Namensdublette)
+  - `PATCH /api/searches/{id}` – umbenennen / Parameter ändern
+  - `DELETE /api/searches/{id}` – löschen
+  - `POST /api/searches/{id}/run` – Favorit sofort ausführen (Treffer wie `/api/search`)
+
+  Die gespeicherten `params` sind exakt die Filter von `/api/search`; es entsteht keine
+  neue Suchlogik — `run` und `/api/search` teilen sich `execute_search`. Fremde IDs
+  ergeben 404 (kein Leak, ob eine fremde ID existiert).
+
+> Offen für spätere Phasen: Web-UI (F1-Frontend), Teilen (F2), Scheduling (F3),
+> Dashboard (F4) — siehe Confluence „Feature: Favoritenverwaltung".
 
 ## [2.6.4.0] – 2026-09-30
 
