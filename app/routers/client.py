@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import es, mailparse, render, webusers
+from app import es, mailparse, mql, render, webusers
 from app.config import settings
 from app.db import get_session
 from app.models import Email, Mailbox, WebUser
@@ -25,6 +25,7 @@ from app.schemas import (
     AccountCreate,
     AccountOut,
     AccountUpdate,
+    MqlQuery,
     PasswordChange,
     UserCreate,
     UserOut,
@@ -226,6 +227,21 @@ def search(
         file=file, mailbox=mailbox, attachments=attachments, since=since,
         until=until, last=last, limit=limit, offset=offset,
     )
+
+
+@router.post("/search/mql")
+def search_mql(body: MqlQuery, user: str = Depends(current_user)) -> dict:
+    """Erweiterte Suche (MQL, Stufe B1): MQL-Ausdruck serverseitig parsen und ausführen.
+
+    Syntaxfehler → ``422`` mit ``{message, position}`` (das UI markiert die Stelle).
+    """
+    try:
+        query = mql.compile_query(body.mql)
+    except mql.MqlError as exc:
+        raise HTTPException(
+            status_code=422, detail={"message": exc.message, "position": exc.position}
+        ) from exc
+    return run_es_query(query, body.limit, body.offset)
 
 
 @router.get("/search/count")

@@ -25,7 +25,7 @@ for mod in [m for m in list(sys.modules) if m.startswith("app")]:
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import es  # noqa: E402
+from app import es, mql  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Email, Mailbox  # noqa: E402
@@ -273,6 +273,71 @@ def test_search_regex_field_and_guard(monkeypatch):
         # Guard: zu langes Muster → 422 (nicht 500)
         too_long = "/" + "a" * 300 + "/"
         assert c.get("/api/search", params={"from": too_long}).status_code == 422
+
+
+def test_mql_compile():
+    """MQL → ES-Query: Logik, Klammern, Feldarten, Wertformen."""
+    q = mql.compile_query('from:@kunde.de AND (subject:"Projekt X" OR filename:*.pdf)')
+    assert set(q["bool"]) == {"must"}
+    must = q["bool"]["must"]
+    assert {"term": {"from_domain": "kunde.de"}} in must
+    should = next(c for c in must if "bool" in c)["bool"]["should"]
+    assert {"match_phrase": {"subject": "Projekt X"}} in should
+    assert any("nested" in c for c in should)
+
+    # NOT → must_not
+    assert mql.compile_query("NOT from:a@b.de") == {
+        "bool": {"must_not": [{"term": {"from_addr": "a@b.de"}}]}
+    }
+    # deutsches ODER + == sind Synonyme
+    g = mql.compile_query('betreff == Rechnung ODER absender == @x.de')
+    assert g["bool"]["should"][0] == {"match": {"subject": "Rechnung"}}
+    assert g["bool"]["should"][1] == {"term": {"from_domain": "x.de"}}
+    # Regex in Textfeld → regexp
+    assert mql.compile_query("subject:/re-[0-9]+/")["regexp"]["subject"]["value"] == "re-[0-9]+"
+    # size + relative Zeit
+    assert mql.compile_query("size>5M") == {"range": {"size": {"gt": 5_000_000}}}
+    assert "gte" in mql.compile_query("after:2026-01-01")["range"]["date"]
+    assert "gte" in mql.compile_query("zeit:last-30d")["range"]["date"]
+
+
+def test_mql_errors():
+    for expr, needle in [
+        ("from:", "Wert erwartet"),
+        ("(a OR b", "')' erwartet"),
+        ("frm:x", "from"),            # unbekanntes Feld → Vorschlag
+        ("  ", "Leere"),
+    ]:
+        try:
+            mql.compile_query(expr)
+            raise AssertionError(f"erwartete MqlError für {expr!r}")
+        except mql.MqlError as e:
+            assert needle in e.message
+            assert isinstance(e.position, int)
+
+
+def test_search_mql_endpoint(monkeypatch):
+    captured: dict = {}
+
+    class CapturingES:
+        def search(self, **kwargs):
+            captured["query"] = kwargs.get("query")
+            return {"hits": {"total": {"value": 0}, "hits": []}}
+
+    monkeypatch.setattr(es, "client", lambda: CapturingES())
+    with TestClient(app) as c:
+        assert c.post("/api/search/mql", json={"mql": "x"}).status_code == 401  # ohne Login
+        c.post("/api/auth/login", json={"username": "admin", "password": "s3cret"})
+
+        r = c.post("/api/search/mql", json={"mql": "from:@kunde.de AND subject:Rechnung"})
+        assert r.status_code == 200
+        must = captured["query"]["bool"]["must"]
+        assert {"term": {"from_domain": "kunde.de"}} in must
+
+        # Syntaxfehler → 422 mit Position
+        bad = c.post("/api/search/mql", json={"mql": "from:"})
+        assert bad.status_code == 422
+        assert "position" in bad.json()["detail"]
 
 
 def test_search_es_unreachable(monkeypatch):
