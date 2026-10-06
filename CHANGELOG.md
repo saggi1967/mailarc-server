@@ -8,7 +8,7 @@ die Versionierung ist vierstellig (PEP 440).
 
 ## [Unreleased]
 
-## [2.7.0.0] – Feature-Branch `feat/favorites-f1` (noch nicht released)
+## [2.7.0.0] – 2026-10-06
 
 ### Hinzugefügt
 - **Favoriten / Gespeicherte Suchen – Feature F1 (Speichern & CRUD), Server-Teil.**
@@ -72,7 +72,8 @@ die Versionierung ist vierstellig (PEP 440).
 ### Hinzugefügt
 - Zentrale Komplett-Konfiguration je Konto (ES + Anhang-Einstellungen).
 
-[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.6.4.0...HEAD
+[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.7.0.0...HEAD
+[2.7.0.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.7.0.0
 [2.6.4.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.6.4.0
 [2.6.3.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.6.3.0
 [2.6.2.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.6.2.0
