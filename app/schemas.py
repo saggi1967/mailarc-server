@@ -6,7 +6,9 @@ Feldnamen und -typen entsprechen dem, was ``app/accounts.py`` und
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ── Accounts ────────────────────────────────────────────────────────────────
@@ -120,6 +122,51 @@ class UserOut(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str
     new_password: str
+
+
+# ── Favoriten / Gespeicherte Suchen (F1) ─────────────────────────────────────
+class SavedSearchParams(BaseModel):
+    """Filtermenge eines Favoriten — exakt die Query-Parameter von ``/api/search``.
+
+    ``from`` ist in Python ein Schlüsselwort, daher Feld ``from_`` mit Alias ``from``;
+    gespeichert und ausgeliefert wird der Alias (``from``), damit die Clients dieselbe
+    Struktur wie bei der Suche sehen.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    q: str | None = None
+    from_: str | None = Field(default=None, alias="from")
+    to: str | None = None
+    domain: str | None = None
+    subject: str | None = None
+    phrase: bool = False
+    file: str | None = None
+    mailbox: str | None = None
+    attachments: bool | None = None
+    since: str | None = None
+    until: str | None = None
+    last: str | None = None
+
+
+class SavedSearchCreate(BaseModel):
+    name: str
+    params: SavedSearchParams = Field(default_factory=SavedSearchParams)
+
+
+class SavedSearchUpdate(BaseModel):
+    """Teil-Update (PATCH): nur gesetzte Felder werden geändert."""
+
+    name: str | None = None
+    params: SavedSearchParams | None = None
+
+
+class SavedSearchOut(BaseModel):
+    id: int
+    name: str
+    params: dict
+    created_at: datetime
+    updated_at: datetime
 
 
 # ── Mailboxes ───────────────────────────────────────────────────────────────

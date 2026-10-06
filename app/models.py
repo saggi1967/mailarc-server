@@ -122,6 +122,30 @@ class SyncJob(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class SavedSearch(Base):
+    """Favorit: eine benannte, serialisierte Filtermenge eines Web-Benutzers.
+
+    ``params`` ist dieselbe Filterstruktur wie die Query-Parameter von
+    ``/api/search`` — es entsteht keine neue Suchlogik, nur Persistenz. Benutzer-
+    gebunden über ``owner_id``; Namen sind je Benutzer eindeutig.
+    (Feature „Favoritenverwaltung", Phase F1 – Speichern & CRUD.)
+    """
+
+    __tablename__ = "saved_search"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "name", name="uq_saved_search_owner_name"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("web_user.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255))
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 class SyncStagedEmail(Base):
     """Durables Staging: Upload überlebt hier, Verarbeitung läuft entkoppelt."""
 
