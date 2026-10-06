@@ -243,6 +243,38 @@ def test_saved_searches_crud_and_run(monkeypatch):
         c.delete("/api/users/dora")
 
 
+def test_search_regex_field_and_guard(monkeypatch):
+    """Stufe A: /…/ in einem keyword-Feld → ES-regexp-Query; Guards greifen."""
+    captured: dict = {}
+
+    class CapturingES:
+        def search(self, **kwargs):
+            captured["query"] = kwargs.get("query")
+            return {"hits": {"total": {"value": 0}, "hits": []}}
+
+    monkeypatch.setattr(es, "client", lambda: CapturingES())
+    with TestClient(app) as c:
+        c.post("/api/auth/login", json={"username": "admin", "password": "s3cret"})
+
+        # Regex im Absender → regexp-Query auf from_addr (case-insensitive)
+        assert c.get("/api/search", params={"from": "/(mueller|müller)/"}).status_code == 200
+        filt = captured["query"]["bool"]["filter"]
+        rx = next(cl["regexp"] for cl in filt if "regexp" in cl)
+        assert "from_addr" in rx
+        assert rx["from_addr"]["value"] == "(mueller|müller)"
+        assert rx["from_addr"]["case_insensitive"] is True
+
+        # Normaler Wert bleibt eine term-Query
+        captured.clear()
+        c.get("/api/search", params={"domain": "apple.com"})
+        filt = captured["query"]["bool"]["filter"]
+        assert any(cl.get("term", {}).get("from_domain") == "apple.com" for cl in filt)
+
+        # Guard: zu langes Muster → 422 (nicht 500)
+        too_long = "/" + "a" * 300 + "/"
+        assert c.get("/api/search", params={"from": too_long}).status_code == 422
+
+
 def test_search_es_unreachable(monkeypatch):
     from elastic_transport import ConnectionError as ESConnectionError
 

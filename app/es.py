@@ -100,6 +100,44 @@ def parse_last(last: str) -> str:
     return (datetime.now() - timedelta(**{units[unit]: int(last[:-1])})).isoformat()
 
 
+def unwrap_regex(value: str) -> str | None:
+    """Gibt das Muster zurück, wenn der Wert als ``/regex/`` geschrieben ist, sonst None."""
+    if len(value) >= 2 and value.startswith("/") and value.endswith("/"):
+        return value[1:-1]
+    return None
+
+
+def regexp_clause(field: str, pattern: str) -> dict:
+    """ES-``regexp``-Query mit Leitplanken (Stufe A — Regex in Suchfeldern).
+
+    Wirkt auf keyword-Feldern (Absender, Domain, Empfänger, Ordner) und ist dort
+    auf den **gesamten** Feldwert verankert (für Teiltreffer ``.*`` verwenden);
+    case-insensitive. Zu lange Muster werden abgelehnt (``ValueError`` → 422).
+    """
+    if len(pattern) > settings.MQL_PATTERN_MAX_LEN:
+        raise ValueError(
+            f"Regex-Muster zu lang (max. {settings.MQL_PATTERN_MAX_LEN} Zeichen)."
+        )
+    return {
+        "regexp": {
+            field: {
+                "value": pattern,
+                "flags": "NONE",
+                "case_insensitive": True,
+                "max_determinized_states": settings.MQL_REGEX_MAX_STATES,
+            }
+        }
+    }
+
+
+def _keyword_clause(field: str, value: str, *, lower: bool = True) -> dict:
+    """term-Query — oder ``regexp``, wenn der Wert als ``/…/`` geschrieben ist."""
+    pattern = unwrap_regex(value)
+    if pattern is not None:
+        return regexp_clause(field, pattern)
+    return {"term": {field: value.lower() if lower else value}}
+
+
 def build_query(
     text: str | None = None,
     frm: str | None = None,
@@ -138,13 +176,13 @@ def build_query(
             }
         )
     if frm:
-        filt.append({"term": {"from_addr": frm.lower()}})
+        filt.append(_keyword_clause("from_addr", frm))
     if to:
-        filt.append({"term": {"to": to.lower()}})
+        filt.append(_keyword_clause("to", to))
     if domain:
-        filt.append({"term": {"from_domain": domain.lower()}})
+        filt.append(_keyword_clause("from_domain", domain))
     if mailbox:
-        filt.append({"term": {"mailbox": mailbox}})
+        filt.append(_keyword_clause("mailbox", mailbox, lower=False))
     if has_attachment is not None:
         filt.append({"term": {"has_attachment": has_attachment}})
 

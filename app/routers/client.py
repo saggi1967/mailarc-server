@@ -140,32 +140,12 @@ def _hit_to_item(h: dict) -> dict:
     }
 
 
-def execute_search(
-    *,
-    q: str | None = None,
-    frm: str | None = None,
-    to: str | None = None,
-    domain: str | None = None,
-    subject: str | None = None,
-    phrase: bool = False,
-    file: str | None = None,
-    mailbox: str | None = None,
-    attachments: bool | None = None,
-    since: str | None = None,
-    until: str | None = None,
-    last: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
-) -> dict:
-    """Server-Proxy-Suche vor Elasticsearch (Treffer, paginiert).
-
-    Gemeinsam genutzt von ``/api/search`` und dem Favoriten-Lauf
-    (``/api/searches/{id}/run``), damit beide exakt dieselbe Suchlogik verwenden.
+def run_es_query(query: dict, limit: int = 50, offset: int = 0) -> dict:
+    """Führt eine fertige ES-Query aus und mappt die Treffer — die einzige
+    Ausführungsstelle. Genutzt von der Formularsuche (``execute_search``) und
+    — künftig — vom MQL-Pfad, damit alle Eingabewege denselben Ausführungscode
+    (highlight, ``source_excludes``, Treffer-Mapping) teilen.
     """
-    query = es.build_query(
-        q, frm, to, domain, subject, file, mailbox, attachments,
-        _since_iso(since, last), until, phrase,
-    )
     resp = es.client().search(
         index=settings.ES_INDEX,
         query=query,
@@ -187,6 +167,39 @@ def execute_search(
         "offset": offset,
         "items": [_hit_to_item(h) for h in hits],
     }
+
+
+def execute_search(
+    *,
+    q: str | None = None,
+    frm: str | None = None,
+    to: str | None = None,
+    domain: str | None = None,
+    subject: str | None = None,
+    phrase: bool = False,
+    file: str | None = None,
+    mailbox: str | None = None,
+    attachments: bool | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    last: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Server-Proxy-Suche vor Elasticsearch (Treffer, paginiert).
+
+    Gemeinsam genutzt von ``/api/search`` und dem Favoriten-Lauf
+    (``/api/searches/{id}/run``), damit beide exakt dieselbe Suchlogik verwenden.
+    Ein ungültiges Regex-Muster (Stufe A) ergibt ``422`` statt ``500``.
+    """
+    try:
+        query = es.build_query(
+            q, frm, to, domain, subject, file, mailbox, attachments,
+            _since_iso(since, last), until, phrase,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return run_es_query(query, limit, offset)
 
 
 @router.get("/search")

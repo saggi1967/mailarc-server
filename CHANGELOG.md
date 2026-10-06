@@ -8,6 +8,18 @@ die Versionierung ist vierstellig (PEP 440).
 
 ## [Unreleased]
 
+## [2.7.1.0] – 2026-10-06
+
+### Hinzugefügt
+- **Erweiterte Suche – Stufe A: Reguläre Ausdrücke in Suchfeldern.** Ein Feldwert in
+  `/…/` wird als ES-`regexp`-Query interpretiert (keyword-Felder `from`/`to`/`domain`/
+  `mailbox`, auf den ganzen Wert verankert, case-insensitive). Leitplanken:
+  `MQL_REGEX_MAX_STATES`, `MQL_PATTERN_MAX_LEN` (zu langes Muster → `422`).
+
+### Geändert
+- ES-Ausführung aus `execute_search` in `run_es_query` extrahiert (eine Ausführungs-
+  stelle; Fundament für den kommenden MQL-Pfad).
+
 ## [2.7.0.0] – 2026-10-06
 
 ### Hinzugefügt
@@ -72,7 +84,8 @@ die Versionierung ist vierstellig (PEP 440).
 ### Hinzugefügt
 - Zentrale Komplett-Konfiguration je Konto (ES + Anhang-Einstellungen).
 
-[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.7.0.0...HEAD
+[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.7.1.0...HEAD
+[2.7.1.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.7.1.0
 [2.7.0.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.7.0.0
 [2.6.4.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.6.4.0
 [2.6.3.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.6.3.0

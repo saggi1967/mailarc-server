@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     ATTACHMENT_MAX_BYTES: int = 25_000_000  # größere Anhänge überspringen
     ATTACHMENT_MAX_CHARS: int = 100_000     # extrahierten Text je Mail begrenzen
 
+    # --- Erweiterte Suche: Regex (Stufe A) + MQL (B1) -----------------------
+    # Leitplanken gegen teure/entartete Regex-Queries (ES `regexp`). Regex in
+    # Suchfeldern: Wert in /…/ wird als regulärer Ausdruck interpretiert.
+    MQL_REGEX_MAX_STATES: int = 10_000  # max_determinized_states der ES-regexp-Query
+    MQL_PATTERN_MAX_LEN: int = 256      # maximale Länge eines Regex-Musters (Zeichen)
+
     # --- client-API-Auth (Web-UI / Rich-Client) -----------------------------
     # Leichtgewichtige interne Auth: ein Benutzer, signiertes Session-Cookie
     # (HMAC über SECRET_KEY). Für Mehrbenutzer/Rollen später erweiterbar.
