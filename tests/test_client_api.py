@@ -316,6 +316,34 @@ def test_mql_errors():
             assert isinstance(e.position, int)
 
 
+def test_mql_foreach():
+    """foreach FELD in [..]: <Suche> → ODER über FELD:wert AND <Suche> (Vereinigung)."""
+    q = mql.compile_query("foreach from in [a@x.de, b@y.de]: has:attachment")
+    branches = q["bool"]["should"]
+    assert len(branches) == 2 and q["bool"]["minimum_should_match"] == 1
+    b0 = branches[0]["bool"]["must"]
+    assert {"term": {"from_addr": "a@x.de"}} in b0
+    assert {"term": {"has_attachment": True}} in b0
+
+    # Einzelwert → kein ODER, nur AND
+    single = mql.compile_query("foreach domain in [x.de]: betreff:Rechnung")
+    assert "should" not in single["bool"]
+    assert {"term": {"from_domain": "x.de"}} in single["bool"]["must"]
+
+    for expr, needle in [
+        ("foreach from [a]: x", "'in' erwartet"),
+        ("foreach from in a: x", "'[' erwartet"),
+        ("foreach from in [a, b", "']' erwartet"),
+        ("foreach from in []: x", "Leere Liste"),
+        ("foreach from in [a] x", "':' erwartet"),
+    ]:
+        try:
+            mql.compile_query(expr)
+            raise AssertionError(f"erwartete MqlError für {expr!r}")
+        except mql.MqlError as e:
+            assert needle in e.message
+
+
 def test_search_mql_endpoint(monkeypatch):
     captured: dict = {}
 

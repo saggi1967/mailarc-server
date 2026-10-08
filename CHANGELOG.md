@@ -8,6 +8,14 @@ die Versionierung ist vierstellig (PEP 440).
 
 ## [Unreleased]
 
+## [2.8.1.0] – 2026-10-08
+
+### Hinzugefügt
+- **MQL `foreach` (B2):** `foreach FELD in [w1, w2, …]: <Suche>` expandiert serverseitig
+  zu einer ODER-Verknüpfung über `FELD:wi AND <Suche>` je Listenwert — eine zusammengeführte
+  Trefferliste (Union), ohne neues Ergebnis-Modell. Grammatik um `[ ]`/`,`/`in` erweitert;
+  Fehler (fehlendes `in`/`[`/`]`/`:`, leere Liste) mit Position.
+
 ## [2.8.0.0] – 2026-10-08
 
 Erweiterte Suche, Stufe A (Regex) + B1 (MQL v1).
@@ -94,7 +102,8 @@ Erweiterte Suche, Stufe A (Regex) + B1 (MQL v1).
 ### Hinzugefügt
 - Zentrale Komplett-Konfiguration je Konto (ES + Anhang-Einstellungen).
 
-[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.8.0.0...HEAD
+[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.8.1.0...HEAD
+[2.8.1.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.8.1.0
 [2.8.0.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.8.0.0
 [2.7.0.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.7.0.0
 [2.6.4.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.6.4.0
