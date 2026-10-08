@@ -73,7 +73,7 @@ class Tok:
     pos: int
 
 
-_WORD_STOP = set(' \t\n\r()"/:=<>')
+_WORD_STOP = set(' \t\n\r()[],"/:=<>')
 
 
 def _tokenize(s: str) -> list[Tok]:
@@ -88,6 +88,12 @@ def _tokenize(s: str) -> list[Tok]:
             toks.append(Tok("LPAREN", "(", i)); i += 1; continue
         if c == ")":
             toks.append(Tok("RPAREN", ")", i)); i += 1; continue
+        if c == "[":
+            toks.append(Tok("LBRACK", "[", i)); i += 1; continue
+        if c == "]":
+            toks.append(Tok("RBRACK", "]", i)); i += 1; continue
+        if c == ",":
+            toks.append(Tok("COMMA", ",", i)); i += 1; continue
         if c == '"':
             j = i + 1
             while j < n and s[j] != '"':
@@ -217,7 +223,9 @@ class _Parser:
                 raise MqlError(close.pos if close else self.length, "')' erwartet.")
             self._next()
             return inner
-        if t.kind in ("RPAREN", "OP"):
+        if t.kind == "WORD" and t.text.lower() == "foreach":
+            return self._foreach()
+        if t.kind in ("RPAREN", "OP", "LBRACK", "RBRACK", "COMMA"):
             raise MqlError(t.pos, f"Unerwartetes '{t.text}'.")
         # t ist WORD / STR / REGEX
         nxt = self._peek(1)
@@ -232,6 +240,46 @@ class _Parser:
             return Term(name, op, _value_of(v), t.pos)
         self._next()
         return Freetext(_value_of(t), t.pos)
+
+    def _foreach(self) -> object:
+        """``foreach FELD in [w1, w2, …]: <Suche>`` → ODER über ``FELD:wi AND <Suche>``."""
+        start = self._next()  # 'foreach'
+        fld = self._peek()
+        if fld is None or fld.kind != "WORD":
+            raise MqlError(fld.pos if fld else self.length, "Nach 'foreach' wird ein Feldname erwartet.")
+        self._next()
+        kw = self._peek()
+        if kw is None or kw.kind != "WORD" or kw.text.lower() != "in":
+            raise MqlError(kw.pos if kw else self.length, "'in' erwartet — foreach FELD in [ … ] : <Suche>.")
+        self._next()
+        lb = self._peek()
+        if lb is None or lb.kind != "LBRACK":
+            raise MqlError(lb.pos if lb else self.length, "'[' erwartet — Werteliste für 'foreach'.")
+        self._next()
+        values: list[Value] = []
+        while True:
+            v = self._peek()
+            if v is None:
+                raise MqlError(self.length, "']' erwartet — Liste nicht geschlossen.")
+            if v.kind == "RBRACK":
+                self._next()
+                break
+            if v.kind == "COMMA":
+                self._next()
+                continue
+            if v.kind not in ("WORD", "STR", "REGEX"):
+                raise MqlError(v.pos, f"Wert erwartet in der Liste, nicht '{v.text}'.")
+            self._next()
+            values.append(_value_of(v))
+        if not values:
+            raise MqlError(start.pos, "Leere Liste in 'foreach'.")
+        colon = self._peek()
+        if colon is None or colon.kind != "OP" or colon.text != ":":
+            raise MqlError(colon.pos if colon else self.length, "':' erwartet — foreach … : <Suche>.")
+        self._next()
+        body = self._or()
+        branches = [And([Term(fld.text, ":", v, fld.pos), body]) for v in values]
+        return Or(branches) if len(branches) > 1 else branches[0]
 
 
 def _value_of(t: Tok) -> Value:
