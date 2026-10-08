@@ -124,6 +124,15 @@ class PasswordChange(BaseModel):
     new_password: str
 
 
+# ── Erweiterte Suche: MQL (B1) ───────────────────────────────────────────────
+class MqlQuery(BaseModel):
+    """Suchanfrage in der mailarc Query Language (serverseitig geparst)."""
+
+    mql: str
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
 # ── Favoriten / Gespeicherte Suchen (F1) ─────────────────────────────────────
 class SavedSearchParams(BaseModel):
     """Filtermenge eines Favoriten — exakt die Query-Parameter von ``/api/search``.

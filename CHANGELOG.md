@@ -8,6 +8,28 @@ die Versionierung ist vierstellig (PEP 440).
 
 ## [Unreleased]
 
+## [2.8.0.0] – 2026-10-06
+
+Erweiterte Suche, Stufe A (Regex) + B1 (MQL v1).
+
+### Hinzugefügt
+- **Stufe A – Reguläre Ausdrücke in Suchfeldern.** Ein Feldwert in `/…/` wird als
+  ES-`regexp`-Query interpretiert (keyword-Felder `from`/`to`/`domain`/`mailbox`, auf
+  den ganzen Wert verankert, case-insensitive). Leitplanken: `MQL_REGEX_MAX_STATES`,
+  `MQL_PATTERN_MAX_LEN` (zu langes Muster → `422`).
+- **B1 – MQL (mailarc Query Language), v1.** Neues Modul `app/mql.py`
+  (Tokenizer → rekursiver Parser → AST → ES-`bool`-Query) und Endpunkt
+  `POST /api/search/mql` (`{mql, limit, offset}`). Umfang: Feld-Operatoren
+  (`feld:wert` bzw. `feld == wert`), Logik `AND`/`OR`/`NOT` (+ deutsch
+  `UND`/`ODER`/`NICHT`), Klammern, implizites AND; Wertformen Wort, `"Phrase"`,
+  `*`-Wildcard, `/Regex/`; `size>`/`size<`, relative/absolute Zeit (`after:`,
+  `date:last-30d`); deutsche Feld-Aliase (`absender`, `betreff`, `zeit`, `anhang`, …).
+  Syntaxfehler → `422` mit `{message, position}` für die Inline-Anzeige im UI.
+
+### Geändert
+- ES-Ausführung aus `execute_search` in `run_es_query` extrahiert — eine einzige
+  Ausführungsstelle, die Formularsuche und MQL teilen.
+
 ## [2.7.0.0] – 2026-10-06
 
 ### Hinzugefügt
@@ -72,7 +94,8 @@ die Versionierung ist vierstellig (PEP 440).
 ### Hinzugefügt
 - Zentrale Komplett-Konfiguration je Konto (ES + Anhang-Einstellungen).
 
-[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.7.0.0...HEAD
+[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.8.0.0...HEAD
+[2.8.0.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.8.0.0
 [2.7.0.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.7.0.0
 [2.6.4.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.6.4.0
 [2.6.3.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.6.3.0
