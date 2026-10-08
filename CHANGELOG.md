@@ -8,7 +8,7 @@ die Versionierung ist vierstellig (PEP 440).
 
 ## [Unreleased]
 
-## [2.8.0.0] – 2026-10-06
+## [2.8.0.0] – 2026-10-08
 
 Erweiterte Suche, Stufe A (Regex) + B1 (MQL v1).
 
