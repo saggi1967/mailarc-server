@@ -156,6 +156,9 @@ class SavedSearchParams(BaseModel):
     since: str | None = None
     until: str | None = None
     last: str | None = None
+    # Alternativ zur Formular-Filtermenge: ein MQL-Ausdruck (Erweiterte Suche).
+    # Ist mql gesetzt, führt der Favoriten-Lauf diesen über den MQL-Parser aus.
+    mql: str | None = None
 
 
 class SavedSearchCreate(BaseModel):

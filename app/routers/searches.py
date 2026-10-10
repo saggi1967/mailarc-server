@@ -14,9 +14,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import mql
 from app.db import get_session
 from app.models import SavedSearch, WebUser
-from app.routers.client import execute_search
+from app.routers.client import execute_search, run_es_query
 from app.schemas import (
     SavedSearchCreate,
     SavedSearchOut,
@@ -142,6 +143,15 @@ def run_search(
     """
     s = _owned_or_404(db, user.id, search_id)
     p = SavedSearchParams.model_validate(s.params or {})
+    if p.mql:
+        # MQL-Favorit: über den Parser ausführen (gleiche Ausführungsstelle wie /api/search/mql).
+        try:
+            query = mql.compile_query(p.mql)
+        except mql.MqlError as exc:
+            raise HTTPException(
+                status_code=422, detail={"message": exc.message, "position": exc.position}
+            ) from exc
+        return run_es_query(query, limit, offset)
     return execute_search(
         q=p.q, frm=p.from_, to=p.to, domain=p.domain, subject=p.subject,
         phrase=p.phrase, file=p.file, mailbox=p.mailbox, attachments=p.attachments,

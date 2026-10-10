@@ -8,6 +8,13 @@ die Versionierung ist vierstellig (PEP 440).
 
 ## [Unreleased]
 
+## [2.8.2.0] – 2026-10-10
+
+### Hinzugefügt
+- **MQL als Favorit speicherbar:** `saved_search.params` darf ein Feld `mql` tragen.
+  Ist es gesetzt, führt `POST /api/searches/{id}/run` den Ausdruck über den MQL-Parser
+  aus (gleiche Ausführungsstelle wie `/api/search/mql`) statt über die Formular-Filter.
+
 ## [2.8.1.0] – 2026-10-08
 
 ### Hinzugefügt
@@ -102,7 +109,8 @@ Erweiterte Suche, Stufe A (Regex) + B1 (MQL v1).
 ### Hinzugefügt
 - Zentrale Komplett-Konfiguration je Konto (ES + Anhang-Einstellungen).
 
-[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.8.1.0...HEAD
+[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.8.2.0...HEAD
+[2.8.2.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.8.2.0
 [2.8.1.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.8.1.0
 [2.8.0.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.8.0.0
 [2.7.0.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.7.0.0
