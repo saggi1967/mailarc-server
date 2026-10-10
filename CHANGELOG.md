@@ -8,6 +8,13 @@ die Versionierung ist vierstellig (PEP 440).
 
 ## [Unreleased]
 
+## [2.8.2.1] – 2026-10-10
+
+### Geändert
+- **Build/Deploy:** Patch-Release, um das aktualisierte **mailarc-web 0.5.0**-Bundle
+  (Favoriten + Erweiterte Suche/MQL) same-origin auszuliefern — neues Server-Image via
+  `build-image.sh`. Keine API-/Code-Änderung am Server.
+
 ## [2.8.2.0] – 2026-10-10
 
 ### Hinzugefügt
@@ -109,7 +116,8 @@ Erweiterte Suche, Stufe A (Regex) + B1 (MQL v1).
 ### Hinzugefügt
 - Zentrale Komplett-Konfiguration je Konto (ES + Anhang-Einstellungen).
 
-[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.8.2.0...HEAD
+[Unreleased]: https://github.com/saggi1967/mailarc-server/compare/v2.8.2.1...HEAD
+[2.8.2.1]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.8.2.1
 [2.8.2.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.8.2.0
 [2.8.1.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.8.1.0
 [2.8.0.0]: https://github.com/saggi1967/mailarc-server/releases/tag/v2.8.0.0
