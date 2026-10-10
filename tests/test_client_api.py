@@ -243,6 +243,23 @@ def test_saved_searches_crud_and_run(monkeypatch):
         c.delete("/api/users/dora")
 
 
+def test_saved_search_mql(monkeypatch):
+    """Favorit mit MQL-Ausdruck: speichern und über den MQL-Parser ausführen."""
+    monkeypatch.setattr(es, "client", lambda: FakeES())
+    with TestClient(app) as c:
+        c.post("/api/auth/login", json={"username": "admin", "password": "s3cret"})
+        r = c.post(
+            "/api/searches",
+            json={"name": "MQL-Fav", "params": {"mql": "from:@apple.com AND subject:Rechnung"}},
+        )
+        assert r.status_code == 201
+        fav = r.json()
+        assert fav["params"]["mql"].startswith("from:@apple.com")
+        run = c.post(f"/api/searches/{fav['id']}/run").json()
+        assert run["total"] == 1 and run["items"][0]["id"] == "INBOX:7:42"
+        c.delete(f"/api/searches/{fav['id']}")
+
+
 def test_search_regex_field_and_guard(monkeypatch):
     """Stufe A: /…/ in einem keyword-Feld → ES-regexp-Query; Guards greifen."""
     captured: dict = {}
